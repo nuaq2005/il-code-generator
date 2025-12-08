@@ -19,11 +19,20 @@ void getChar();
 void getNonBlank();
 int lex();
 int lookup(char ch);
-void expr();
-void term();
-void factor();
-void exp();
-void assign();
+
+/* NodePtr */
+struct Node {
+    int token;
+    string lexeme;
+    Node* left;
+    Node* right;
+};
+
+/* Function declarations for syntax analyzer */
+Node* expr();
+Node* term();
+Node* factor();
+Node* assign();
 
 /* Character classes*/
 #define LETTER 0
@@ -32,7 +41,8 @@ void assign();
 
 /* Token Codes*/
 #define INT_LIT 10
-#define IDENT 11
+#define FLOAT_LIT 11
+#define IDENT 12
 #define ASSIGN_OP 20
 #define ADD_OP 21
 #define SUB_OP 22
@@ -43,14 +53,22 @@ void assign();
 #define COMMA_OP 29
 
 /* For assign */
-#define UNSIGNED_KEY 40
-#define SIGNED_KEY 41
-#define BYTE_KEY 42
-#define SHORT_KEY 43
 #define INT_KEY 44
-#define LONG_KEY 45
 #define FLOAT_KEY 46
 
+/* Symbol Table */
+struct Symbol {
+    bool is_ident = true;
+    string name;
+    string type;
+    int address = 0;
+    union {
+        int int_value;
+        float float_value;
+    } value;
+};
+
+int symbolTable [20]; //array to hold symbol table entries
 
 
 /* lookup - look up operators and paranthesis and return token */
@@ -168,18 +186,8 @@ int lex() {
             getChar();
          } //loops through letters and digits to form the full lexeme
          //if first lex is a letter, it goes through if statements to see if it is a keyword, if not it is treated as identifier
-         if (isKeyWord(lexeme, "unsigned")){
-            nextToken = UNSIGNED_KEY; 
-         } else if (isKeyWord(lexeme, "signed")){
-            nextToken = SIGNED_KEY;
-         } else if (isKeyWord(lexeme, "byte")){
-            nextToken = BYTE_KEY;
-         } else if (isKeyWord(lexeme, "short")){
-            nextToken = SHORT_KEY;
-         } else if (isKeyWord(lexeme, "int")){
+         if (isKeyWord(lexeme, "int")){
             nextToken = INT_KEY;
-         } else if (isKeyWord(lexeme, "long")){
-            nextToken = LONG_KEY;
          } else if (isKeyWord(lexeme, "float")) {
             nextToken = FLOAT_KEY;
          } else {
@@ -217,40 +225,18 @@ int lex() {
    return nextToken;
 } /* End of function lex */
 
-
-/* Symbol Table */
-struct Symbol {
-    bool is_ident = true;
-    string name;
-    string actual_type;
-    string expected_type;
-    int address = 0;
-    union {
-        int int_value;
-        float float_value;
-    } value;
-};
-
-/* NodePtr */
-struct Node {
-    Symbol symbol;
-    Node* leftptr = nullptr;
-    Node* rightptr = nullptr;
-};
-
-
 /*Syntax Analyzer*/
-
-void factor (){
+Node* factor (){
     cout << step++ << ". Enter <factor> \n";
-
+    Node* node = nullptr;
     //determine which path to take
-    if (nextToken == IDENT || nextToken == INT_LIT || nextToken == FLOAT_KEY){
+    if (nextToken == IDENT || nextToken == INT_LIT || nextToken == FLOAT_LIT){
+        node = new Node{nextToken, lexeme, nullptr, nullptr};
         lex(); //next token
     } else if (nextToken == LEFT_PAREN){
         lex(); //get past '('
         step++;
-        expr(); //go to expression
+        node = expr(); //go to expression
         if (nextToken == RIGHT_PAREN){
             lex(); //get past ')'
         } else {
@@ -260,20 +246,27 @@ void factor (){
         cout << "Syntax Error \n";
     }
     cout << step++ << ". Exit <factor> \n";
+    return node;
 }
 
-void term (){
+Node* term (){
     cout << step++ << ". Enter <term> \n";
 
     //first we must have a factor
-    factor();
+    Node* left = factor();
 
     //then we can have 0 or more (* | /) factor
     while (nextToken == MULT_OP || nextToken == DIV_OP) {
+        int op = nextToken;
+        string opLex = lexeme;
         lex(); //get the operator
-        factor(); //get the next factor
+
+       Node* right = factor(); //get the next factor
+       Node* parent = new Node{op, opLex, left, right};
+       left = parent; //update left to be the new parent node
     }
     cout << step++ << ". Exit <term> \n";
+    return left;
 }
 
 /* expr
@@ -281,54 +274,63 @@ void term (){
  <expr> -> <term> {(+ | -) <term>}
  */
 
-void expr() {
+Node* expr() {
     cout << step++ << ". Enter <expr> \n";
 
     //print first term
-    term();
+    Node* left = term();
 
     //then we can have 0 or more (+ | - | *) term
     while (nextToken == ADD_OP || nextToken == SUB_OP) {
+        int op = nextToken;
+        string opLex = lexeme;
         lex(); //get the operator
-        term(); //get the next term
+    
+        Node* right = term(); //get the next term
+        Node* parent = new Node{op, opLex, left, right};
+        left = parent; //update left to be the new parent node
     }
     cout << step++ << ". Exit <expr> \n";
+    return left;
 }
 
 // assign -> [unsigned/signed] (byte| short | int | long ) <ident> (= | += | -= | *= | /= ) <expression> ;
 
-void assign() {
+Node* assign() {
     cout << step++ << ". Enter <assign> \n"; //every line begins here
 
-    // Optional: unsigned or signed
-    if (nextToken == UNSIGNED_KEY || nextToken == SIGNED_KEY) {
-        lex(); // consume the unsigned/signed keyword
-    }
-
     // Optional: byte, short, int, or long
-    if (nextToken == BYTE_KEY || nextToken == SHORT_KEY || 
-        nextToken == INT_KEY || nextToken == LONG_KEY) {
+    if (nextToken == INT_KEY || nextToken == FLOAT_KEY) {
         lex(); // consume the type keyword
     }
 
     //first lexeme must be identifier
-    if(nextToken == IDENT){ 
-        lex();
-    } else {
+    if(nextToken != IDENT){ 
         cout << "Syntax Error \n";
     }
 
+    Node* left = new Node{IDENT, lexeme, nullptr, nullptr};
+    lex(); 
+    
+
+    string opLex;
     //second lexeme must be operator
     if(nextToken == ASSIGN_OP){
-        lex();
+        int op = ASSIGN_OP;
+        opLex = lexeme;
+        lex(); 
     } else {
         cout << "Syntax Error \n";
     }
 
+
+
     //third lexeme must be expression
-    expr(); //we enter expression, which takes us through the terms/factors/operations
+    Node* right = expr(); //we enter expression, which takes us through the terms/factors/operations
+    Node* root = new Node{ASSIGN_OP, opLex, left, right};
 
     cout << step++ << ". Exit <assign> \n";
+    return root;
 }
 
 int main () {
