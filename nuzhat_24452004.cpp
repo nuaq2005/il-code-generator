@@ -54,6 +54,7 @@ Node* assign();
 #define LEFT_PAREN 27
 #define RIGHT_PAREN 28
 #define COMMA_OP 29
+#define NEXT 30
 
 /* For assign */
 #define INT_KEY 44
@@ -109,7 +110,7 @@ int lookup(char ch) {
             break;
         case '\n':
             addChar();
-            nextToken = EOF;
+            nextToken = NEXT;
             break;
         case '=':
             addChar();
@@ -201,25 +202,18 @@ int lex() {
          break;
 
         /* Parse integer literals */
-        case DIGIT:
+        case DIGIT: {
+             bool isFloat = false;
              addChar();
              getChar();
-             while (charClass == DIGIT) {
+             while (charClass == DIGIT || charClass == '.') { //loops through digits to form the full lexeme
+                if (charClass == '.') isFloat = true;
                 addChar();
                 getChar();
-                if (charClass == '.') { //checks for decimal point to identify float literals
-                    addChar();
-                    getChar();
-                    while (charClass == DIGIT) { //after decimal point, must have digits
-                        addChar();
-                        getChar();
-                    }
-                    nextToken = FLOAT_LIT; //if decimal point found, it is float literal
-                    return nextToken;
-                }
-             } //if first lex is a digit, it is treated as integer literal, loop breaks once a non-digit is found
-             nextToken = INT_LIT;
+             } 
+             nextToken = isFloat ? FLOAT_LIT : INT_LIT; //if decimal point found, it is float literal
              break;
+        }
 
         /* Parentheses and operators */
         case UNKNOWN: //if char is not letter or digit, it is either operator, parenthesis or unknown
@@ -241,16 +235,32 @@ int lex() {
 } /* End of function lex */
 
 /* Add symbols to table */
-void addSymbol(const string& name, const string& type) {
+void addSymbol(bool isIdent, const string& name, const string& type, const string& value) {
     if (symbolCount < 20) {
         symbolTable[symbolCount].name = name;
         symbolTable[symbolCount].type = type;
         symbolTable[symbolCount].address = symbolCount; //simple address assignment
+        
+        symbolTable[symbolCount].value.int_value = stoi(value);
+        symbolTable[symbolCount].value.float_value = stof(value);
+
         symbolCount++;
     } else {
         cout << "Symbol table full!" << endl;
     }
 }
+
+/* Lookup type of identifier in symbol table */
+string lookupType(const string &name) {
+    for (int i = 0; i < symbolCount; i++) {
+        if (symbolTable[i].name == name) {
+            return symbolTable[i].type;
+        }
+    }
+    cout << "Undeclared identifier: " << name << "\n";
+    return ""; // error type
+}
+
 
 /*Syntax Analyzer*/
 Node* factor (){
@@ -258,8 +268,19 @@ Node* factor (){
     Node* node = nullptr;
     //determine which path to take
     if (nextToken == IDENT || nextToken == INT_LIT || nextToken == FLOAT_LIT){
-        node = new Node{nextToken, lexeme, nullptr, nullptr};
+        node = new Node{nextToken, lexeme, nullptr, nullptr, "", ""}; //create node for factor
+        
+        //check symbol table for type
+        if (nextToken == IDENT) {
+            node->actual_type = lookupType(lexeme);
+        } else if (nextToken == INT_LIT) {
+            node->actual_type = "int";
+        } else if (nextToken == FLOAT_LIT) {
+            node->actual_type = "float";
+        }
+
         lex(); //next token
+
     } else if (nextToken == LEFT_PAREN){
         lex(); //get past '('
         step++;
@@ -287,9 +308,9 @@ Node* term (){
         int op = nextToken;
         string opLex = lexeme;
         lex(); //get the operator
-
        Node* right = factor(); //get the next factor
-       Node* parent = new Node{op, opLex, left, right};
+       
+       Node* parent = new Node{op, opLex, left, right, "", ""};
        left = parent; //update left to be the new parent node
     }
     cout << step++ << ". Exit <term> \n";
@@ -314,7 +335,7 @@ Node* expr() {
         lex(); //get the operator
     
         Node* right = term(); //get the next term
-        Node* parent = new Node{op, opLex, left, right};
+        Node* parent = new Node{op, opLex, left, right, "", ""};
         left = parent; //update left to be the new parent node
     }
     cout << step++ << ". Exit <expr> \n";
@@ -325,35 +346,26 @@ Node* expr() {
 Node* assign() {
     cout << step++ << ". Enter <assign> \n"; //every line begins here
 
-    // Optional: byte, short, int, or long
-    if (nextToken == INT_KEY || nextToken == FLOAT_KEY) {
-        lex(); // consume the type keyword
-    }
-
     //first lexeme must be identifier
     if(nextToken != IDENT){ 
         cout << "Syntax Error \n";
     }
 
-    Node* left = new Node{IDENT, lexeme, nullptr, nullptr};
+    Node* left = new Node{IDENT, lexeme, nullptr, nullptr, "", ""}; //create node for identifier
     lex(); 
     
-
-    string opLex;
+    
     //second lexeme must be operator
-    if(nextToken == ASSIGN_OP){
-        int op = ASSIGN_OP;
-        opLex = lexeme;
-        lex(); 
-    } else {
+    if(nextToken != ASSIGN_OP){
         cout << "Syntax Error \n";
     }
 
-
-
+    string opLex = lexeme;
+    lex(); 
+  
     //third lexeme must be expression
     Node* right = expr(); //we enter expression, which takes us through the terms/factors/operations
-    Node* root = new Node{ASSIGN_OP, opLex, left, right};
+    Node* root = new Node{ASSIGN_OP, opLex, left, right, "", ""}; //create root node for assignment
 
     cout << step++ << ". Exit <assign> \n";
     return root;
@@ -363,40 +375,31 @@ Node* assign() {
 //edit tmrw
 Node* assign_list(){
     cout << step++ << ". Enter <assign_list> \n";
-
+    
     //process zero or more {IDENT =}
     Node* left = nullptr;
-    while (nextToken == IDENT) {
-        Node* identNode = new Node{IDENT, lexeme, nullptr, nullptr};
-        lex(); //consume IDENT
 
-        //must be followed by '='
-        if (nextToken == ASSIGN_OP) {
-            string opLex = lexeme;
-            lex(); //consume '='
-            Node* assignNode = new Node{ASSIGN_OP, opLex, identNode, nullptr};
-            if (left == nullptr) {
-                left = assignNode; //first assignment
-            } else {
-                Node* parent = new Node{COMMA_OP, ",", left, assignNode};
-                left = parent; //link to previous assignments
-            }
-        } else {
-            cout << "Syntax Error \n";
+    if (nextToken == IDENT) {
+        Node* identNode = new Node{IDENT, lexeme, nullptr, nullptr, "", ""}; //create node for identifier
+        lex(); //consume identifier
+
+        if (nextToken != ASSIGN_OP){
+            cout << "Syntax Error: expected '=' \n";
         }
+
+        string opLex = lexeme;
+        lex(); //consume '='
+        Node* right = assign_list(); //process the next assignment
+
+        Node* assignNode = new Node{ASSIGN_OP, opLex, identNode, right, "", ""}; //create assignment node
+        left = assignNode; //update left to be the assignment node
+
+        return assignNode;
     }
 
-    //process final <assign>
-    Node* finalAssign = assign();
-    if (left == nullptr) {
-        left = finalAssign; //only one assignment
-    } else {
-        Node* parent = new Node{COMMA_OP, ",", left, finalAssign};
-        left = parent; //link final assignment
-    }
-
+    Node* assignNode = assign(); //process the final assignment
     cout << step++ << ". Exit <assign_list> \n";
-    return left;
+    return assignNode;
 }
 
 /* <declare list> -> (<int> | <float>) <ident> [= <expr>] {, <ident> [= <expr>] };
@@ -409,8 +412,8 @@ Node* declare (){
     }
 
     string identName = lexeme;
-    addSymbol(identName, currentType); //add identifier to symbol table with current type
-    Node* left = new Node{IDENT, identName, nullptr, nullptr}; //create node for identifier
+    
+    Node* left = new Node{IDENT, identName, nullptr, nullptr, currentType, ""}; //create node for identifier
     lex(); //consume identifier
 
     //optional assignment [= <expr>]
@@ -418,8 +421,17 @@ Node* declare (){
         string opLex = lexeme;
         lex(); //consume '='
         Node* right = expr(); //get expression
-        Node* assignNode = new Node{ASSIGN_OP, opLex, left, right};
+        Node* assignNode = new Node{ASSIGN_OP, opLex, left, right, "", currentType}; //create assignment node
+        
+        //store value in the symbol table
+        string type = currentType;
+        if(right -> token == INT_LIT || right -> token == FLOAT_LIT) {
+            addSymbol(false, identName, type, right -> lexeme);
+        }
         left = assignNode; //update left to be the assignment node
+    } else {
+        //no assignment, just declaration
+        addSymbol(true, identName, currentType, "0"); //default value 0
     }
     return left;
 }
@@ -448,7 +460,7 @@ Node* declare_list() {
         lex(); //consume ','
         Node* newIdent = declare(); //process the next identifier (and optional assignment)
         //link the new identifier (or assignment) to the left node
-        Node* parent = new Node{COMMA_OP, ",", left, newIdent};
+        Node* parent = new Node{COMMA_OP, ",", left, newIdent, "", ""};
         left = parent; //update left to be the new parent node
     }
 
@@ -456,18 +468,140 @@ Node* declare_list() {
     return left;
 }
 
-/* <proj_start> --> <assign_list>  | <declare_list> 
-void proj_start() {
+// <proj_start> --> <assign_list>  | <declare_list> 
+Node* proj_start() {
     cout << step++ << ". Enter <proj_start> \n";
 
+    Node* root = nullptr;
+
     if (nextToken == INT_KEY || nextToken == FLOAT_KEY) {
-        declare_list();
+        root = declare_list();
     } else {
-        assign_list();
+        root = assign_list();
     }
 
     cout << step++ << ". Exit <proj_start> \n";
-} */
+    return root;
+} 
+
+void computeActualTypes(Node* node) {
+    if (node == nullptr || node->actual_type.empty()) return;
+
+    // Post-order traversal
+    computeActualTypes(node->left);
+    computeActualTypes(node->right);
+
+    // Process current node
+    if (node->token == ASSIGN_OP) {
+        // Assignment: left child is identifier, right child is expression
+        node->actual_type = node->left->actual_type; // type of assignment is type of identifier
+    } 
+    else if( node -> token == ADD_OP || node -> token == SUB_OP || 
+             node -> token == MULT_OP || node -> token == DIV_OP) {
+        // Arithmetic operations: determine type based on children
+        string leftType = node->left->actual_type;
+        string rightType = node->right->actual_type;
+
+        if (leftType == "float" || rightType == "float") {
+            node->actual_type = "float"; // if either operand is float, result is float
+        } else {
+            node->actual_type = "int"; // otherwise, result is int
+        }
+    }
+    // Leaf nodes (IDENT, INT_LIT, FLOAT_LIT) already have actual_type set during parsing
+}
+
+/* After syntax tree (Post-Order) we have to compute Expected types (Pre-Order)*/
+void computeExpectedTypes(Node* node, const string& expectedType) {
+    if (node == nullptr) return;
+
+    node->expected_type = expectedType; //I dont think I need this line
+
+    // Pre-order processing
+    if (node->token == ASSIGN_OP) {
+        string idType = node->left->actual_type; //left child is identifier
+        computeExpectedTypes(node->left, idType); //identifier expected type is its own type
+    } else if( node -> token == ADD_OP || node -> token == SUB_OP || 
+        node -> token == MULT_OP || node -> token == DIV_OP) {
+            string childExpectedType = expectedType;
+            computeExpectedTypes(node->left, childExpectedType);
+            computeExpectedTypes(node->right, childExpectedType);
+    } else { //for commas 
+        computeExpectedTypes(node->left, expectedType);
+        computeExpectedTypes(node->right, expectedType);
+    }
+
+    //leaf node
+    if( node -> token == IDENT || node -> token == INT_LIT || node -> token == FLOAT_LIT) {
+        node -> expected_type = expectedType;
+        return;
+    }
+
+    computeExpectedTypes(node->left, expectedType);
+    computeExpectedTypes(node->right, expectedType);
+}
+
+void generateIL(Node* node){
+    if (node == nullptr) return;
+
+    if(node-> token == ASSIGN_OP){
+        cout << "push addr(" << node->left->lexeme << ")\n";
+
+        // Recursively read RHS expression
+        if(node -> right) generateIL(node -> right);
+
+        //tyoe conversion is I.actualType != I.expectedType
+        if (node -> actual_type != node -> expected_type) {
+            if (node -> actual_type == "int" && node -> expected_type == "float") {
+                cout << "itof " <<  "\n";
+            } else if (node -> actual_type == "float" && node -> expected_type == "int") {
+                cout << "ftoi " <<  "\n";
+            }
+        }
+
+        cout << "assign \n";
+        return;
+    }
+
+    // Post-order traversal
+    if (node->left) generateIL(node->left);
+    if (node->right) generateIL(node->right);
+
+    // Process leaf node
+    if (node->token == IDENT) {
+        cout << "push " << node->lexeme << "\n";
+    } else if (node->token == INT_LIT || node->token == FLOAT_LIT) {
+        cout << "push " << node->lexeme << "\n";
+    }
+    
+    // arithmetic ops
+    if (node->token >= ADD_OP && node->token <= DIV_OP) {
+        string leftType = node->left->actual_type;
+        string rightType = node->right->actual_type;
+        string resultType = node->actual_type;
+
+        if(leftType == "int" && resultType == "float") {
+            cout << "itof \n";
+        }
+
+        string iorf = (node->actual_type == "int") ? "i" : "f";
+        cout << iorf;
+        switch (node->token) {
+            case ADD_OP:
+                cout << "add \n";
+                break;
+            case SUB_OP:
+                cout << "sub \n";
+                break;
+            case MULT_OP:
+                cout << "mul \n";
+                break;
+            case DIV_OP:
+                cout << "div \n";
+                break;
+        }
+    }
+}
 
 int main () {
    /* Open input file and process contents */
@@ -480,13 +614,26 @@ int main () {
     getChar();
     lex();
     do {
-    if (nextToken == INT_KEY || nextToken == FLOAT_KEY)
-        declare_list();
-    else
-        assign();
-        cout << '\n';
+        Node* statement_root = nullptr;
+        while (nextToken == NEXT) { //every line, start new project
+            lex(); //consume newline
+        }
+        statement_root = proj_start();
+        if(statement_root == nullptr) {
+            break; // Exit if no more statements
+        }
+        computeActualTypes(statement_root);
+        computeExpectedTypes(statement_root, ""); //no expected type at root
+        generateIL(statement_root);
     } while (nextToken != EOF);
    }
    inputFile.close();
+
+   cout << "\n=== FINAL SYMBOL TABLE ===" << endl;
+    for (int i = 0; i < symbolCount; i++) {
+        string type = symbolTable[i].type;
+        cout << symbolTable[i].name << "\tType: " << type << "\tAddress: " << symbolTable[i].address << "\tValue: " << (type == "int" ? (symbolTable[i].value.int_value) : (symbolTable[i].value.float_value)) << endl;
+    }
+
    return 0;
 }
