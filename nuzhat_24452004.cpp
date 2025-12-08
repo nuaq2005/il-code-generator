@@ -26,6 +26,9 @@ struct Node {
     string lexeme;
     Node* left;
     Node* right;
+
+    string actual_type; //to hold the actual type after type checking
+    string expected_type; //to hold the expected type during type checking
 };
 
 /* Function declarations for syntax analyzer */
@@ -68,7 +71,9 @@ struct Symbol {
     } value;
 };
 
-int symbolTable [20]; //array to hold symbol table entries
+Symbol symbolTable[20]; //array to hold symbol table entries
+int symbolCount = 0; //number of symbols in the table
+string currentType; //to hold the type of the current declaration
 
 
 /* lookup - look up operators and paranthesis and return token */
@@ -202,6 +207,16 @@ int lex() {
              while (charClass == DIGIT) {
                 addChar();
                 getChar();
+                if (charClass == '.') { //checks for decimal point to identify float literals
+                    addChar();
+                    getChar();
+                    while (charClass == DIGIT) { //after decimal point, must have digits
+                        addChar();
+                        getChar();
+                    }
+                    nextToken = FLOAT_LIT; //if decimal point found, it is float literal
+                    return nextToken;
+                }
              } //if first lex is a digit, it is treated as integer literal, loop breaks once a non-digit is found
              nextToken = INT_LIT;
              break;
@@ -224,6 +239,18 @@ int lex() {
     cout << step++ << ". Next token is: " << nextToken << ", Next lexeme is " << lexeme << endl;
    return nextToken;
 } /* End of function lex */
+
+/* Add symbols to table */
+void addSymbol(const string& name, const string& type) {
+    if (symbolCount < 20) {
+        symbolTable[symbolCount].name = name;
+        symbolTable[symbolCount].type = type;
+        symbolTable[symbolCount].address = symbolCount; //simple address assignment
+        symbolCount++;
+    } else {
+        cout << "Symbol table full!" << endl;
+    }
+}
 
 /*Syntax Analyzer*/
 Node* factor (){
@@ -294,8 +321,7 @@ Node* expr() {
     return left;
 }
 
-// assign -> [unsigned/signed] (byte| short | int | long ) <ident> (= | += | -= | *= | /= ) <expression> ;
-
+// assign ->  <ident> = <expression>;
 Node* assign() {
     cout << step++ << ". Enter <assign> \n"; //every line begins here
 
@@ -333,6 +359,116 @@ Node* assign() {
     return root;
 }
 
+// <assign_list> -> {<ident> =} <assign>;
+//edit tmrw
+Node* assign_list(){
+    cout << step++ << ". Enter <assign_list> \n";
+
+    //process zero or more {IDENT =}
+    Node* left = nullptr;
+    while (nextToken == IDENT) {
+        Node* identNode = new Node{IDENT, lexeme, nullptr, nullptr};
+        lex(); //consume IDENT
+
+        //must be followed by '='
+        if (nextToken == ASSIGN_OP) {
+            string opLex = lexeme;
+            lex(); //consume '='
+            Node* assignNode = new Node{ASSIGN_OP, opLex, identNode, nullptr};
+            if (left == nullptr) {
+                left = assignNode; //first assignment
+            } else {
+                Node* parent = new Node{COMMA_OP, ",", left, assignNode};
+                left = parent; //link to previous assignments
+            }
+        } else {
+            cout << "Syntax Error \n";
+        }
+    }
+
+    //process final <assign>
+    Node* finalAssign = assign();
+    if (left == nullptr) {
+        left = finalAssign; //only one assignment
+    } else {
+        Node* parent = new Node{COMMA_OP, ",", left, finalAssign};
+        left = parent; //link final assignment
+    }
+
+    cout << step++ << ". Exit <assign_list> \n";
+    return left;
+}
+
+/* <declare list> -> (<int> | <float>) <ident> [= <expr>] {, <ident> [= <expr>] };
+this handles multiple declarations in one line separated by commas */
+
+Node* declare (){
+     //check for identifier
+    if (nextToken != IDENT) {
+        cout << "Expected identifier \n";
+    }
+
+    string identName = lexeme;
+    addSymbol(identName, currentType); //add identifier to symbol table with current type
+    Node* left = new Node{IDENT, identName, nullptr, nullptr}; //create node for identifier
+    lex(); //consume identifier
+
+    //optional assignment [= <expr>]
+    if (nextToken == ASSIGN_OP) {
+        string opLex = lexeme;
+        lex(); //consume '='
+        Node* right = expr(); //get expression
+        Node* assignNode = new Node{ASSIGN_OP, opLex, left, right};
+        left = assignNode; //update left to be the assignment node
+    }
+    return left;
+}
+
+Node* declare_list() {
+    cout << step++ << ". Enter <declare_list> \n";
+
+    //first lexeme must be type keyword
+    if (nextToken != INT_KEY && nextToken != FLOAT_KEY) {
+        cout << "Expected type keyword \n";
+    } 
+
+    if (nextToken == INT_KEY) {
+        currentType = "int";
+    } else if (nextToken == FLOAT_KEY) {
+        currentType = "float";
+    }
+
+    lex(); //consume type keyword
+
+    //process first identifier (and optional assignment)
+    Node* left = declare();
+
+    //handle additional identifiers separated by commas {, IDENT [= <expr>]}
+    while (nextToken == COMMA_OP) {
+        lex(); //consume ','
+        Node* newIdent = declare(); //process the next identifier (and optional assignment)
+        //link the new identifier (or assignment) to the left node
+        Node* parent = new Node{COMMA_OP, ",", left, newIdent};
+        left = parent; //update left to be the new parent node
+    }
+
+    cout << step++ << ". Exit <declare_list> \n";
+    return left;
+}
+
+/* <proj_start> --> <assign_list>  | <declare_list> 
+void proj_start() {
+    cout << step++ << ". Enter <proj_start> \n";
+
+    if (nextToken == INT_KEY || nextToken == FLOAT_KEY) {
+        declare_list();
+    } else {
+        assign_list();
+    }
+
+    cout << step++ << ". Exit <proj_start> \n";
+} */
+
 int main () {
    /* Open input file and process contents */
    inputFile.open("front.in");
@@ -343,11 +479,14 @@ int main () {
    } else {
     getChar();
     lex();
-    do{
+    do {
+    if (nextToken == INT_KEY || nextToken == FLOAT_KEY)
+        declare_list();
+    else
         assign();
         cout << '\n';
     } while (nextToken != EOF);
-}
+   }
    inputFile.close();
    return 0;
 }
