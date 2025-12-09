@@ -57,6 +57,14 @@ Node* assign();
 #define NEXT 30
 #define DEC_POINT 31
 
+/* Token Types 
+enum TokenType {
+    EOF_TOKEN, INT_CONST, FLOAT_CONST, TIDENT,
+    TASSIGN, TADD, TSUB, TMULT, TDIV,
+    TLEFT_PAREN, TRIGHT_PAREN, TCOMMA, TNEXT, TDEC_POINT
+};
+*/
+
 /* For assign */
 #define INT_KEY 44
 #define FLOAT_KEY 46
@@ -158,8 +166,6 @@ void getChar() {
     }
     else if (isdigit(nextChar)){
         charClass = DIGIT;
-    } else if (nextChar == '.') {
-        charClass = DEC_POINT;
     } else {
         charClass = UNKNOWN;
     }
@@ -353,6 +359,7 @@ Node* assign() {
     }
 
     Node* left = new Node{IDENT, lexeme, nullptr, nullptr, "", ""}; //create node for identifier
+    left -> actual_type = lookupType(lexeme); //get type from symbol table
     lex(); 
     
     
@@ -389,57 +396,24 @@ Node* assign_list(){
         lex(); //consume '='
         Node* right = assign_list(); //process the next assignment
 
-        Node* assignNode = new Node{ASSIGN_OP, opLex, identNode, right, "", ""}; //create assignment node
-        left = assignNode; //update left to be the assignment node
+        Node* root = new Node{ASSIGN_OP, opLex, identNode, right, "", ""}; //create assignment node
+        left = root; //update left to be the assignment node
 
-        return assignNode;
+        return root;
     }
 
-    Node* assignNode = assign(); //process the final assignment
-    return assignNode;
+    Node* root = assign(); //process the final assignment
+    return root;
 }
 
 /* <declare list> -> (<int> | <float>) <ident> [= <expr>] {, <ident> [= <expr>] };
-this handles multiple declarations in one line separated by commas */
-
-Node* declare (){
-     //check for identifier
-    if (nextToken != IDENT) {
-        cout << "Expected identifier \n";
-    }
-
-    string identName = lexeme;
-    
-    Node* left = new Node{IDENT, identName, nullptr, nullptr, currentType, currentType, true}; //create node for identifier
-    lex(); //consume identifier
-
-    //optional assignment [= <expr>]
-    if (nextToken == ASSIGN_OP) {
-        string opLex = lexeme;
-        lex(); //consume '='
-        Node* right = expr(); //get expression
-        Node* assignNode = new Node{ASSIGN_OP, opLex, left, right, "", currentType, true}; //create assignment node
-        
-        //store value in the symbol table
-        string type = currentType;
-        if(right -> token == INT_LIT || right -> token == FLOAT_LIT) {
-            addSymbol(false, identName, type, right -> lexeme);
-        }
-        left = assignNode; //update left to be the assignment node
-    } else {
-        //no assignment, just declaration
-        addSymbol(true, identName, currentType, "0"); //default value 0
-        lex();
-    }
-    return left;
-}
-
+this handles multiple declarations in one line separated by commas 
+<declare> -> */
 Node* declare_list() {
-
     //first lexeme must be type keyword
     if (nextToken != INT_KEY && nextToken != FLOAT_KEY) {
         cout << "Expected type keyword \n";
-    } 
+    }
 
     if (nextToken == INT_KEY) {
         currentType = "int";
@@ -447,25 +421,72 @@ Node* declare_list() {
         currentType = "float";
     }
 
-    lex(); //consume type keyword
+    lex();
 
     //process first identifier (and optional assignment)
-    Node* left = declare();
+    if(nextToken != IDENT) {
+        cout << "Expected identifier \n";
+    }
+    string identName = lexeme;
+    Node* left = new Node{IDENT, identName, nullptr, nullptr, currentType, "", true}; //create node for identifier
+    lex(); //consume identifier
+
+    //check for optional assignment
+    if (nextToken == ASSIGN_OP) {
+        string opLex = lexeme;
+        lex(); //consume '='
+        Node* right = expr(); //process expression
+
+        //create assignment node
+        Node* assignNode = new Node{ASSIGN_OP, opLex, left, right, "", "", true};
+        left = assignNode; //update left to be the assignment node
+
+        //add symbol to table with initial value
+        if (right->token == INT_LIT || right->token == FLOAT_LIT) {
+            addSymbol(true, identName, currentType, right->lexeme);
+        } 
+        left = assignNode; //update left to be the assignment node
+    } else {
+        //add symbol to table without initial value
+        addSymbol(true, identName, currentType, "0"); //default value
+    }
 
     //handle additional identifiers separated by commas {, IDENT [= <expr>]}
     while (nextToken == COMMA_OP) {
         lex(); //consume ','
-        Node* newIdent = declare(); //process the next identifier (and optional assignment)
-        //link the new identifier (or assignment) to the left node
-        Node* parent = new Node{COMMA_OP, ",", left, newIdent, "", "", true};
-        left = parent; //update left to be the new parent node
-    }
 
+        if (nextToken != IDENT) {
+            cout << "Expected identifier after ',' \n";
+        }
+
+        string newidentName = lexeme;
+        Node* newIdent = new Node{IDENT, newidentName, nullptr, nullptr, currentType, currentType, true}; //create node for identifier
+        lex(); //consume identifier
+
+        //check for optional assignment
+        if (nextToken == ASSIGN_OP){
+            string opLex = lexeme;
+            lex();
+            Node* right = expr();
+            Node* assignNode = new Node{ASSIGN_OP, opLex, newIdent, right, "", currentType, true};
+
+            if(right->token == INT_LIT || right->token == FLOAT_LIT) {
+                addSymbol(false, newidentName, currentType, right->lexeme);
+            }
+            newIdent = assignNode; //update newIdent to be the assignment node
+        } else {
+            //add symbol to table without initial value
+            addSymbol(true, newidentName, currentType, "0"); //default value
+        }
+        
+    Node* parent = new Node{COMMA_OP, ",", left, newIdent, "", "",true};
+    left = parent; //update left to be the new parent node
+    }
     return left;
 }
 
 // <proj_start> --> <assign_list>  | <declare_list> 
-Node* proj_start() {
+Node* program() {
 
     Node* root = nullptr;
 
@@ -612,12 +633,14 @@ int main () {
         while (nextToken == NEXT) { //every line, start new project
             lex(); //consume newline
         }
-        statement_root = proj_start();
+        statement_root = program();
         if(statement_root == nullptr) {
             break; // Exit if no more statements
         }
+        cout << "compute Actual Types\n";
         computeActualTypes(statement_root);
         computeExpectedTypes(statement_root, ""); //no expected type at root
+        cout << "Generate IL Code:\n";
         generateIL(statement_root);
     } while (nextToken != EOF);
    }
