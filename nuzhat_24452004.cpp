@@ -26,9 +26,9 @@ struct Node {
     string lexeme;
     Node* left;
     Node* right;
-
     string actual_type; //to hold the actual type after type checking
     string expected_type; //to hold the expected type during type checking
+    bool is_declaration = false; //to mark if the node is a declaration
 };
 
 /* Function declarations for syntax analyzer */
@@ -55,6 +55,7 @@ Node* assign();
 #define RIGHT_PAREN 28
 #define COMMA_OP 29
 #define NEXT 30
+#define DEC_POINT 31
 
 /* For assign */
 #define INT_KEY 44
@@ -116,6 +117,10 @@ int lookup(char ch) {
             addChar();
             nextToken = ASSIGN_OP;
             break;
+        case '.':
+            addChar();
+            nextToken = DEC_POINT;
+            break;
         default:
             addChar();
             nextToken = EOF;
@@ -153,8 +158,9 @@ void getChar() {
     }
     else if (isdigit(nextChar)){
         charClass = DIGIT;
-    } 
-    else {
+    } else if (nextChar == '.') {
+        charClass = DEC_POINT;
+    } else {
         charClass = UNKNOWN;
     }
 }
@@ -206,8 +212,8 @@ int lex() {
              bool isFloat = false;
              addChar();
              getChar();
-             while (charClass == DIGIT || charClass == '.') { //loops through digits to form the full lexeme
-                if (charClass == '.') isFloat = true;
+             while (charClass == DIGIT || charClass == DEC_POINT) { //loops through digits to form the full lexeme
+                if (charClass == DEC_POINT) isFloat = true;
                 addChar();
                 getChar();
              } 
@@ -264,7 +270,6 @@ string lookupType(const string &name) {
 
 /*Syntax Analyzer*/
 Node* factor (){
-    cout << step++ << ". Enter <factor> \n";
     Node* node = nullptr;
     //determine which path to take
     if (nextToken == IDENT || nextToken == INT_LIT || nextToken == FLOAT_LIT){
@@ -288,17 +293,15 @@ Node* factor (){
         if (nextToken == RIGHT_PAREN){
             lex(); //get past ')'
         } else {
-            cout << "Syntax Error \n";
+            cout << "Syntax Error: Missing ')' \n";
         }
     } else {
-        cout << "Syntax Error \n";
+        cout << "Syntax Error: Invalid Factor \n";
     }
-    cout << step++ << ". Exit <factor> \n";
     return node;
 }
 
 Node* term (){
-    cout << step++ << ". Enter <term> \n";
 
     //first we must have a factor
     Node* left = factor();
@@ -313,7 +316,7 @@ Node* term (){
        Node* parent = new Node{op, opLex, left, right, "", ""};
        left = parent; //update left to be the new parent node
     }
-    cout << step++ << ". Exit <term> \n";
+ 
     return left;
 }
 
@@ -323,8 +326,7 @@ Node* term (){
  */
 
 Node* expr() {
-    cout << step++ << ". Enter <expr> \n";
-
+ 
     //print first term
     Node* left = term();
 
@@ -338,13 +340,12 @@ Node* expr() {
         Node* parent = new Node{op, opLex, left, right, "", ""};
         left = parent; //update left to be the new parent node
     }
-    cout << step++ << ". Exit <expr> \n";
+
     return left;
 }
 
 // assign ->  <ident> = <expression>;
 Node* assign() {
-    cout << step++ << ". Enter <assign> \n"; //every line begins here
 
     //first lexeme must be identifier
     if(nextToken != IDENT){ 
@@ -366,16 +367,13 @@ Node* assign() {
     //third lexeme must be expression
     Node* right = expr(); //we enter expression, which takes us through the terms/factors/operations
     Node* root = new Node{ASSIGN_OP, opLex, left, right, "", ""}; //create root node for assignment
-
-    cout << step++ << ". Exit <assign> \n";
     return root;
 }
 
 // <assign_list> -> {<ident> =} <assign>;
 //edit tmrw
 Node* assign_list(){
-    cout << step++ << ". Enter <assign_list> \n";
-    
+
     //process zero or more {IDENT =}
     Node* left = nullptr;
 
@@ -398,7 +396,6 @@ Node* assign_list(){
     }
 
     Node* assignNode = assign(); //process the final assignment
-    cout << step++ << ". Exit <assign_list> \n";
     return assignNode;
 }
 
@@ -413,7 +410,7 @@ Node* declare (){
 
     string identName = lexeme;
     
-    Node* left = new Node{IDENT, identName, nullptr, nullptr, currentType, ""}; //create node for identifier
+    Node* left = new Node{IDENT, identName, nullptr, nullptr, currentType, currentType, true}; //create node for identifier
     lex(); //consume identifier
 
     //optional assignment [= <expr>]
@@ -421,7 +418,7 @@ Node* declare (){
         string opLex = lexeme;
         lex(); //consume '='
         Node* right = expr(); //get expression
-        Node* assignNode = new Node{ASSIGN_OP, opLex, left, right, "", currentType}; //create assignment node
+        Node* assignNode = new Node{ASSIGN_OP, opLex, left, right, "", currentType, true}; //create assignment node
         
         //store value in the symbol table
         string type = currentType;
@@ -432,12 +429,12 @@ Node* declare (){
     } else {
         //no assignment, just declaration
         addSymbol(true, identName, currentType, "0"); //default value 0
+        lex();
     }
     return left;
 }
 
 Node* declare_list() {
-    cout << step++ << ". Enter <declare_list> \n";
 
     //first lexeme must be type keyword
     if (nextToken != INT_KEY && nextToken != FLOAT_KEY) {
@@ -460,17 +457,15 @@ Node* declare_list() {
         lex(); //consume ','
         Node* newIdent = declare(); //process the next identifier (and optional assignment)
         //link the new identifier (or assignment) to the left node
-        Node* parent = new Node{COMMA_OP, ",", left, newIdent, "", ""};
+        Node* parent = new Node{COMMA_OP, ",", left, newIdent, "", "", true};
         left = parent; //update left to be the new parent node
     }
 
-    cout << step++ << ". Exit <declare_list> \n";
     return left;
 }
 
 // <proj_start> --> <assign_list>  | <declare_list> 
 Node* proj_start() {
-    cout << step++ << ". Enter <proj_start> \n";
 
     Node* root = nullptr;
 
@@ -480,7 +475,6 @@ Node* proj_start() {
         root = assign_list();
     }
 
-    cout << step++ << ". Exit <proj_start> \n";
     return root;
 } 
 
@@ -542,7 +536,7 @@ void computeExpectedTypes(Node* node, const string& expectedType) {
 }
 
 void generateIL(Node* node){
-    if (node == nullptr) return;
+    if (node == nullptr || node->is_declaration) return; //skip declarations
 
     if(node-> token == ASSIGN_OP){
         cout << "push addr(" << node->left->lexeme << ")\n";
