@@ -30,6 +30,7 @@ struct Node {
     Node* right;
     string actual_type; //to hold the actual type after type checking
     string expected_type; //to hold the expected type during type checking
+    bool is_declaration = false; //to mark if the node is a declaration
 };
 
 /* Function declarations for syntax analyzer */
@@ -238,7 +239,7 @@ void getChar() {
              } 
              nextToken = isFloat ? T_FLOAT_CONST : T_INT_CONST; //if decimal point found, it is float literal
              break;
-            }
+        }
         case UNKNOWN: //if char is not letter or digit, it is either operator, parenthesis or unknown
              lookup(nextChar);
              if (nextToken != T_EOF)
@@ -258,7 +259,9 @@ void getChar() {
 
 /* IL CODE GENERATOR */
 void generateIL(Node* node) {
-    if (!node) return;
+    if (!node || node->is_declaration) return;
+
+    cout << "=== IL CODE ===\n";
 
     //post-order traversal
     generateIL(node->left);
@@ -479,7 +482,7 @@ Node* declare_list (){
 
 
     string name = lexeme;
-    Node* left = new Node{T_IDENT, name, nullptr, nullptr, type, ""}; //create node for identifier
+    Node* left = new Node{T_IDENT, name, nullptr, nullptr, type, "", true}; //create node for identifier
     lex(); //consume identifier
 
     Node *result = left;
@@ -494,7 +497,7 @@ Node* declare_list (){
             cout << intValue << " " << floatValue << "\n";
             addSymbol(true, name, type, intValue, floatValue);
         }
-        Node* assignNode = new Node{T_ASSIGN, op, left, right, "", ""}; //create assignment node, left is ident, right is expr
+        Node* assignNode = new Node{T_ASSIGN, op, left, right, "", "", true}; //create assignment node, left is ident, right is expr
         result = assignNode; //update result to be the assignment node
     }
 
@@ -505,7 +508,7 @@ Node* declare_list (){
             return nullptr;
         }
         string newname = lexeme;
-        Node* newIdent = new Node{T_IDENT, newname, nullptr, nullptr, type, ""}; //create node for identifier
+        Node* newIdent = new Node{T_IDENT, newname, nullptr, nullptr, type, "", true}; //create node for identifier
         lex(); //consume identifier
 
         //check for assignment (optional)
@@ -515,11 +518,11 @@ Node* declare_list (){
             Node* right = expr();
             if(right -> token == T_FLOAT_CONST || right->token == T_INT_CONST) {
                 int intValue = (right->token == T_INT_CONST) ? stoi(right->lexeme) : 0;
-                float floatValue = (right->token == T_FLOAT_CONST) ? stof(right->lexeme) : 0.0f;
+                float floatValue = (right->token == T_FLOAT_CONST) ? stof(right->lexeme) : 0.0;
                 cout << intValue << " " << floatValue << "\n";
                 addSymbol(true, newname, type, intValue, floatValue);
             }
-            Node* assignNode = new Node{T_ASSIGN, opLex, newIdent, right, "", ""}; //create assignment node
+            Node* assignNode = new Node{T_ASSIGN, opLex, newIdent, right, "", "", true}; //create assignment node
             result = assignNode; //update result to be the assignment node
         } else {
             //add symbol to table without initial value
@@ -527,7 +530,7 @@ Node* declare_list (){
             float fval = 0.0;
             addSymbol (true, newname, type, ival, fval); //default value
         }
-        Node* parent = new Node{T_COMMA, ",", result, newIdent, "", ""};
+        Node* parent = new Node{T_COMMA, ",", result, newIdent, "", "", true};
         result = parent; //update result to be the new parent node
     }
 
@@ -540,9 +543,13 @@ Node* declare_list (){
 
 Node* program (){
      Node* root = nullptr;
+    if(nextToken != T_INT_KEY && nextToken != T_FLOAT_KEY) {
+        return nullptr;
+    }
+    root = declare_list();
 
     if (nextToken == T_INT_KEY || nextToken == T_FLOAT_KEY) {
-        declare_list();
+        root = declare_list();
     } else {
         root = assign_list();
     }
@@ -562,8 +569,6 @@ int main () {
 
     getChar();
     lex();
-    
-    cout << "=== IL CODE ===\n";
     
     do {
         while (nextToken == T_NEXT) {
