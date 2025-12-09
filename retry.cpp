@@ -539,20 +539,31 @@ Node* declare_list (){
 
 Node* program (){
     cout << "program called \n";
-     Node* root = nullptr;
-    if(nextToken != T_INT_KEY && nextToken != T_FLOAT_KEY) {
+
+    if (nextToken != T_INT_KEY && nextToken != T_FLOAT_KEY) {
         return nullptr;
     }
-    root = declare_list();
 
-    if (nextToken == T_INT_KEY || nextToken == T_FLOAT_KEY) {
-        root = declare_list();
-    } else {
-        root = assign_list();
+    Node* firstDecl = declare_list();
+
+    while(nextToken == T_NEXT) {
+        lex(); //consume newline
+    }
+    
+    if (nextToken == T_EOF) {
+        return firstDecl;
     }
 
+    if (nextToken == T_INT_KEY || nextToken == T_FLOAT_KEY) {
+        return declare_list();
+    } else if (nextToken == T_IDENT) {
+        return assign_list();
+    }
+    
+    return firstDecl;
+
     cout << "program returning \n";
-    return root;
+    return firstDecl;
 }
 
 
@@ -567,25 +578,10 @@ int main () {
 
     getChar();
     lex();
-    
-    do {
-        while (nextToken == T_NEXT) {
-            lex();
-        }
-        
-        if (nextToken == T_EOF) break;
-        
-        Node* statement_root = program();
-        
-        if (statement_root == nullptr) {
-            break;
-        }
-        
-        determineActualType(statement_root);
-        determineExpectedType(statement_root);
-        generateIL(statement_root);
-        
-    } while (nextToken != T_EOF);
+    Node* root = program();
+    determineExpectedType(root);
+    determineActualType(root);
+    generateIL(root);
     
     inputFile.close();
 
