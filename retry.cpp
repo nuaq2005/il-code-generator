@@ -62,11 +62,12 @@ struct Symbol {
     int lvalue;
 };
 
+void addSymbol(bool isIdent,const string &lexeme,const string &type, const string &value);
 Symbol symbolTable[20]; //array to hold symbol table entries
 int symbolCount = 0; //number of symbols in the table
 
 /* Add symbol to symbol table */
-void addSymbol (bool isIdent, const string &lexeme, const string &type, int &value, float &fvalue) {
+void addSymbol (bool isIdent, const string &lexeme, const string &type,const string &value) {
     for(int i = 0; i < symbolCount; i++) {
         if (symbolTable[i].name == lexeme) {
             return; //symbol already exists
@@ -75,13 +76,8 @@ void addSymbol (bool isIdent, const string &lexeme, const string &type, int &val
     symbolTable[symbolCount].is_ident = isIdent;
     symbolTable[symbolCount].name = lexeme;
     symbolTable[symbolCount].type = type;
-    if(type == "int") {
-        symbolTable[symbolCount].rvalue.int_value = value;
-        symbolTable[symbolCount].rvalue.float_value = static_cast<float>(value);
-    } else if (type == "float") {
-        symbolTable[symbolCount].rvalue.float_value = fvalue;
-        symbolTable[symbolCount].rvalue.int_value = static_cast<int>(fvalue);
-    }
+    if(type == "int") symbolTable[symbolCount].rvalue.int_value = stoi(value);
+    else symbolTable[symbolCount].rvalue.float_value = stof(value);
     symbolTable[symbolCount].lvalue = rand(); //initialize lvalue
     symbolCount++;
 }
@@ -138,10 +134,6 @@ TokenType lookup(char ch) {
             addChar();
             nextToken = T_ASSIGN;
             break;
-        case '.':
-            addChar();
-            nextToken = T_DOT;
-            break;
         case EOF:
             nextToken = T_EOF;
             lexeme[0] = 'E';
@@ -185,6 +177,8 @@ void getChar() {
     }
     else if (isdigit(nextChar)){
         charClass = DIGIT;
+    } else if (nextChar == DOT){
+        charClass = DOT;
     } else {
         charClass = UNKNOWN;
     }
@@ -232,8 +226,8 @@ void getChar() {
              bool isFloat = false;
              addChar();
              getChar();
-             while (charClass == DIGIT || charClass == T_DOT ) { //loops through digits to form the full lexeme
-                if (charClass == T_DOT) isFloat = true;
+             while (charClass == DIGIT || charClass == DOT ) { //loops through digits to form the full lexeme
+                if (charClass == DOT) isFloat = true;
                 addChar();
                 getChar();
              } 
@@ -253,7 +247,7 @@ void getChar() {
                 lexeme[3] = 0;
              break;
         }
-        cout << "Next token is: " << nextToken << ", Next lexeme is " << lexeme << endl;
+        //cout << "Next token is: " << nextToken << ", Next lexeme is " << lexeme << endl;
          return nextToken;
     }
 
@@ -323,7 +317,7 @@ void determineActualType(Node* node) {
     //post-order traversal
     determineActualType (node->left);
     determineActualType (node->right);
-
+    cout << "determineActualType called for token: " << node->lexeme << "\n";
     //determine actual type based on children
     if (node->token == T_ADD || node->token == T_SUB || node->token == T_MULT || node->token == T_DIV) {
         string leftType = node->left ? node->left->actual_type : "";
@@ -364,9 +358,9 @@ void determineActualType(Node* node) {
 // <factor> --> <ident> | <int_lit> | <float_lit> | ( <expr> )
 
 Node* factor (){
-       
+    cout << "factor called \n";
     if(nextToken == T_IDENT || nextToken == T_INT_CONST || nextToken == T_FLOAT_CONST){
-        Node* node = new Node{nextToken, lexeme, nullptr, nullptr, "", ""}; //create node for factor
+        Node* node = new Node{nextToken, lexeme, nullptr, nullptr, "", "", false}; //create node for factor
         lex(); //next token
         return node;
     } else if (nextToken == T_LEFT_PAREN){
@@ -382,9 +376,11 @@ Node* factor (){
         cout << "Syntax Error: Invalid Factor \n";
         return nullptr;
     }
+    cout << "factor returning \n";
 }
 
 Node* term (){
+    cout << "term called \n";
     Node* left = factor();
 
     while(nextToken == T_MULT || nextToken == T_DIV) {
@@ -393,14 +389,15 @@ Node* term (){
         lex(); //get the operator
     
         Node* right = factor(); //get the next factor
-        Node* parent = new Node{op, opLex, left, right, "", ""};
+        Node* parent = new Node{op, opLex, left, right, "", "", false};
         left = parent; //update left to be the new parent node
     }
-
+    cout << "term returning \n";
     return left;
 }
 
 Node* expr (){
+    cout << "expr called \n";
     //print first term
     Node* left = term();
 
@@ -411,20 +408,21 @@ Node* expr (){
         lex(); //get the operator
     
         Node* right = term(); //get the next term
-        Node* parent = new Node{op, opLex, left, right, "", ""};
+        Node* parent = new Node{op, opLex, left, right, "", "", false};
         left = parent; //update left to be the new parent node
     }
-
+    cout << "expr returning \n";
     return left;
 }
 
 Node* assign (){
+    cout << "assign called \n";
     if(nextToken != T_IDENT) {
         cout << "Syntax Error: expected identifier \n";
     }
 
     string name = lexeme;
-    Node* left = new Node{T_IDENT, name, nullptr, nullptr, "", ""};
+    Node* left = new Node{T_IDENT, name, nullptr, nullptr, "", "", false};
     lex(); //consume identifier
 
     if (nextToken != T_ASSIGN){
@@ -433,15 +431,17 @@ Node* assign (){
     string op = lexeme;
     lex(); //consume '='
     Node* right = expr(); //process the next assignment
-    Node* root = new Node{T_ASSIGN, op, left, right, "", ""}; //create root node for assignment
+    Node* root = new Node{T_ASSIGN, op, left, right, "", "", false}; //create root node for assignment
+    cout << "assign returning \n";
     return root;
 }
 
 Node* assign_list (){
+    cout << "assign_list called \n";
     Node* left = nullptr;
 
     if (nextToken == T_IDENT) {
-        Node* identNode = new Node{T_IDENT, lexeme, nullptr, nullptr, "", ""};
+        Node* identNode = new Node{T_IDENT, lexeme, nullptr, nullptr, "", "", false};
         identNode->actual_type = lookupType(lexeme);
         lex();
 
@@ -454,13 +454,15 @@ Node* assign_list (){
         lex();
         Node* right = assign_list();
 
-        Node* assignNode = new Node{T_ASSIGN, opLex, identNode, right, "", ""};
+        Node* assignNode = new Node{T_ASSIGN, opLex, identNode, right, "", "", false};
         return assignNode;
     }
+    cout << "assign_list returning \n";
     return assign();
 }
 
 Node* declare_list (){
+    cout << "declare_list called \n";
    if (nextToken == T_NEXT) {
         lex(); //consume newline
         return nullptr; //empty declaration list
@@ -491,14 +493,15 @@ Node* declare_list (){
         string op = lexeme;
         lex(); //consume '='
         Node* right = expr();
-        if(right -> token == T_FLOAT_CONST || right->token == T_INT_CONST) {
-            int intValue = (right->token == T_INT_CONST) ? stoi(right->lexeme) : 0;
-            float floatValue = (right->token == T_FLOAT_CONST) ? stof(right->lexeme) : 0.0f;
-            cout << intValue << " " << floatValue << "\n";
-            addSymbol(true, name, type, intValue, floatValue);
-        }
         Node* assignNode = new Node{T_ASSIGN, op, left, right, "", "", true}; //create assignment node, left is ident, right is expr
-        result = assignNode; //update result to be the assignment node
+        
+        if(right -> token == T_FLOAT_CONST || right->token == T_INT_CONST) {
+            addSymbol(false, name, type, right->lexeme);
+        }
+        left = assignNode; //update left to be the assignment node
+    } else {
+        //add symbol to table without initial value
+        addSymbol(true, name, type, "0"); //default value
     }
 
     while(nextToken == T_COMMA){
@@ -519,29 +522,23 @@ Node* declare_list (){
             if(right -> token == T_FLOAT_CONST || right->token == T_INT_CONST) {
                 int intValue = (right->token == T_INT_CONST) ? stoi(right->lexeme) : 0;
                 float floatValue = (right->token == T_FLOAT_CONST) ? stof(right->lexeme) : 0.0;
-                cout << intValue << " " << floatValue << "\n";
-                addSymbol(true, newname, type, intValue, floatValue);
+                //cout << intValue << " " << floatValue << "\n";
+                addSymbol(false, newname, type, right->lexeme);
             }
             Node* assignNode = new Node{T_ASSIGN, opLex, newIdent, right, "", "", true}; //create assignment node
             result = assignNode; //update result to be the assignment node
         } else {
-            //add symbol to table without initial value
-            int ival = 0;
-            float fval = 0.0;
-            addSymbol (true, newname, type, ival, fval); //default value
+            addSymbol(true, newname, type, "0");
         }
         Node* parent = new Node{T_COMMA, ",", result, newIdent, "", "", true};
         result = parent; //update result to be the new parent node
     }
-
-    //add symbol to symbol table
-    int i = 0;
-    float f = 0.0;
-    addSymbol (true, name, type, i, f);
+    cout << "declare_list returning \n";
     return result;
 }
 
 Node* program (){
+    cout << "program called \n";
      Node* root = nullptr;
     if(nextToken != T_INT_KEY && nextToken != T_FLOAT_KEY) {
         return nullptr;
@@ -554,6 +551,7 @@ Node* program (){
         root = assign_list();
     }
 
+    cout << "program returning \n";
     return root;
 }
 
