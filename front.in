@@ -1,6 +1,6 @@
-int i = 5, j = 10
-float x = 23.5
-int k = (i + j) * x
+int i=1, j=8, k
+float y,x=10.5
+y=k=(i+j)/(x-6.8)
 int A = 10, B = 20, C = 30
 int D
 D = B * (C * (A + B))

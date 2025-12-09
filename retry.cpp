@@ -30,7 +30,6 @@ struct Node {
     Node* right;
     string actual_type; //to hold the actual type after type checking
     string expected_type; //to hold the expected type during type checking
-    bool is_declaration = false; //to mark if the node is a declaration
 };
 
 /* Function declarations for syntax analyzer */
@@ -39,7 +38,7 @@ Node* term();
 Node* factor();
 Node* assign();
 Node* assign_list();
-Node* declare_list();
+void declare_list();
 Node* program();
 string currentType; //to hold the type of the current declaration
 
@@ -177,7 +176,7 @@ void getChar() {
     }
     else if (isdigit(nextChar)){
         charClass = DIGIT;
-    } else if (nextChar == DOT){
+    } else if (nextChar == '.'){
         charClass = DOT;
     } else {
         charClass = UNKNOWN;
@@ -247,15 +246,13 @@ void getChar() {
                 lexeme[3] = 0;
              break;
         }
-        //cout << "Next token is: " << nextToken << ", Next lexeme is " << lexeme << endl;
-         return nextToken;
+        cout << "Next token is: " << nextToken << ", Next lexeme is " << lexeme << endl;
+        return nextToken;
     }
 
 /* IL CODE GENERATOR */
 void generateIL(Node* node) {
-    if (!node || node->is_declaration) return;
-
-    cout << "=== IL CODE ===\n";
+    if (!node) return;
 
     //post-order traversal
     generateIL(node->left);
@@ -265,6 +262,11 @@ void generateIL(Node* node) {
     string iorf = (node->actual_type == "int") ? "i" : "f";
         cout << iorf;
         switch (node->token) {
+            case T_IDENT:
+            case T_INT_CONST:
+            case T_FLOAT_CONST:
+                cout << "push " << node->lexeme << "\n";
+                break;
             case T_ADD:
                 cout << "add \n";
                 break;
@@ -279,11 +281,6 @@ void generateIL(Node* node) {
                 break;
             case T_ASSIGN:
                 cout << "assign \n";
-                break;
-            case T_IDENT:
-            case T_INT_CONST:
-            case T_FLOAT_CONST:
-                cout << "push " << node->lexeme << "\n";
                 break;
             default:
                 break;
@@ -359,13 +356,25 @@ void determineActualType(Node* node) {
 
 Node* factor (){
     cout << "factor called \n";
+    Node* node = nullptr;
+
     if(nextToken == T_IDENT || nextToken == T_INT_CONST || nextToken == T_FLOAT_CONST){
-        Node* node = new Node{nextToken, lexeme, nullptr, nullptr, "", "", false}; //create node for factor
+        node = new Node{nextToken, lexeme, nullptr, nullptr, "", ""}; //create node for factor
         lex(); //next token
+
+        //check symbol table for type
+        if (nextToken == T_IDENT) {
+            node->actual_type = lookupType(lexeme);
+        } else if (nextToken == T_INT_CONST) {
+            node->actual_type = "int";
+        } else if (nextToken == T_FLOAT_CONST) {
+            node->actual_type = "float";
+        }
+
         return node;
     } else if (nextToken == T_LEFT_PAREN){
         lex(); //get past '('
-        Node* node = expr(); //go to expression
+        node = expr(); //go to expression
         if (nextToken == T_RIGHT_PAREN){
             lex(); //get past ')'
         } else {
@@ -377,6 +386,7 @@ Node* factor (){
         return nullptr;
     }
     cout << "factor returning \n";
+    return node;
 }
 
 Node* term (){
@@ -389,7 +399,7 @@ Node* term (){
         lex(); //get the operator
     
         Node* right = factor(); //get the next factor
-        Node* parent = new Node{op, opLex, left, right, "", "", false};
+        Node* parent = new Node{op, opLex, left, right, "", ""};
         left = parent; //update left to be the new parent node
     }
     cout << "term returning \n";
@@ -408,7 +418,7 @@ Node* expr (){
         lex(); //get the operator
     
         Node* right = term(); //get the next term
-        Node* parent = new Node{op, opLex, left, right, "", "", false};
+        Node* parent = new Node{op, opLex, left, right, "", ""};
         left = parent; //update left to be the new parent node
     }
     cout << "expr returning \n";
@@ -417,32 +427,32 @@ Node* expr (){
 
 Node* assign (){
     cout << "assign called \n";
-    if(nextToken != T_IDENT) {
-        cout << "Syntax Error: expected identifier \n";
-    }
 
     string name = lexeme;
-    Node* left = new Node{T_IDENT, name, nullptr, nullptr, "", "", false};
+    Node* left = new Node{T_IDENT, name, nullptr, nullptr, "", ""};
     lex(); //consume identifier
 
     if (nextToken != T_ASSIGN){
         cout << "Syntax Error: expected '=' \n";
     }
+
     string op = lexeme;
     lex(); //consume '='
     Node* right = expr(); //process the next assignment
-    Node* root = new Node{T_ASSIGN, op, left, right, "", "", false}; //create root node for assignment
+    Node* root = new Node{T_ASSIGN, op, left, right, "", ""}; //create root node for assignment
     cout << "assign returning \n";
     return root;
 }
 
 Node* assign_list (){
     cout << "assign_list called \n";
-    Node* left = nullptr;
-
-    if (nextToken == T_IDENT) {
-        Node* identNode = new Node{T_IDENT, lexeme, nullptr, nullptr, "", "", false};
-        identNode->actual_type = lookupType(lexeme);
+     
+    if(nextToken != T_IDENT){
+        cout << "Syntax Error: expected ident\n";
+        return nullptr;
+    }
+        Node* left = new Node{T_IDENT, lexeme, nullptr, nullptr, "", ""};
+        left->actual_type = lookupType(lexeme);
         lex();
 
         if (nextToken != T_ASSIGN){
@@ -452,25 +462,101 @@ Node* assign_list (){
 
         string opLex = lexeme;
         lex();
-        Node* right = assign_list();
 
-        Node* assignNode = new Node{T_ASSIGN, opLex, identNode, right, "", "", false};
+        Node* right = nullptr;
+
+        if(nextToken == T_IDENT){
+            right = assign_list();
+        } else {
+            right = assign();
+        }
+
+        Node* assignNode = new Node{T_ASSIGN, opLex, left, right, "", ""};
+
+        cout << "assign_list returning \n";
         return assignNode;
-    }
-    cout << "assign_list returning \n";
-    return assign();
 }
 
-Node* declare_list (){
+void declare_list (){
+    cout << "declare_list called \n";
+    
+    if (nextToken == T_NEXT) {
+        lex();
+        return;
+    }
+
+    if(nextToken != T_INT_KEY && nextToken != T_FLOAT_KEY) {
+        cout << "Expected type keyword \n";
+        return;
+    }
+
+    string type = (nextToken == T_INT_KEY) ? "int" : "float";
+    lex();
+
+    if(nextToken != T_IDENT) {
+        cout << "Expected identifier \n";
+        return;
+    }
+
+    string name = lexeme;
+    lex();
+
+    // Check for assignment (optional)
+    if (nextToken == T_ASSIGN){
+        lex(); // consume '='
+        Node* right = expr();
+        
+        if(right->token == T_FLOAT_CONST || right->token == T_INT_CONST) {
+            addSymbol(false, name, type, right->lexeme);
+        } else {
+            addSymbol(true, name, type, "0");
+        }
+        
+        delete right; // Clean up - don't need the tree
+    } else {
+        addSymbol(true, name, type, "0");
+    }
+
+    // Handle comma-separated declarations
+    while(nextToken == T_COMMA){
+        lex();
+        if(nextToken != T_IDENT) {
+            cout << "Expected identifier after ',' \n";
+            return;
+        }
+        
+        string newname = lexeme;
+        lex();
+
+        if (nextToken == T_ASSIGN){
+            lex(); // consume '='
+            Node* right = expr();
+            
+            if(right->token == T_FLOAT_CONST || right->token == T_INT_CONST) {
+                addSymbol(false, newname, type, right->lexeme);
+            } else {
+                addSymbol(true, newname, type, "0");
+            }
+            
+            delete right; // Clean up
+        } else {
+            addSymbol(true, newname, type, "0");
+        }
+    }
+    
+    cout << "declare_list returning \n";
+}
+
+/*void declare_list (){
     cout << "declare_list called \n";
    if (nextToken == T_NEXT) {
         lex(); //consume newline
-        return nullptr; //empty declaration list
+        return; //empty declaration list
    }
 
    if(nextToken != T_INT_KEY && nextToken != T_FLOAT_KEY) {
         cout << "Expected type keyword \n";
-        return nullptr;
+        return;
     }
 
     string type = (nextToken == T_INT_KEY) ? "int" : "float";
@@ -479,12 +565,12 @@ Node* declare_list (){
     //process first identifier (and optional assignment)
     if(nextToken != T_IDENT) {
         cout << "Expected identifier \n";
-        return nullptr;
+        return;
     }
 
 
     string name = lexeme;
-    Node* left = new Node{T_IDENT, name, nullptr, nullptr, type, "", true}; //create node for identifier
+    Node* left = new Node{T_IDENT, name, nullptr, nullptr, type, ""}; //create node for identifier
     lex(); //consume identifier
 
     Node *result = left;
@@ -493,12 +579,13 @@ Node* declare_list (){
         string op = lexeme;
         lex(); //consume '='
         Node* right = expr();
-        Node* assignNode = new Node{T_ASSIGN, op, left, right, "", "", true}; //create assignment node, left is ident, right is expr
+        Node* assignNode = new Node{T_ASSIGN, op, left, right, "", ""}; //create assignment node, left is ident, right is expr
         
         if(right -> token == T_FLOAT_CONST || right->token == T_INT_CONST) {
             addSymbol(false, name, type, right->lexeme);
         }
         left = assignNode; //update left to be the assignment node
+
     } else {
         //add symbol to table without initial value
         addSymbol(true, name, type, "0"); //default value
@@ -508,10 +595,10 @@ Node* declare_list (){
         lex();
         if(nextToken != T_IDENT) {
             cout << "Expected identifier after ',' \n";
-            return nullptr;
+            return;
         }
         string newname = lexeme;
-        Node* newIdent = new Node{T_IDENT, newname, nullptr, nullptr, type, "", true}; //create node for identifier
+        Node* newIdent = new Node{T_IDENT, newname, nullptr, nullptr, type, ""}; //create node for identifier
         lex(); //consume identifier
 
         //check for assignment (optional)
@@ -525,46 +612,61 @@ Node* declare_list (){
                 //cout << intValue << " " << floatValue << "\n";
                 addSymbol(false, newname, type, right->lexeme);
             }
-            Node* assignNode = new Node{T_ASSIGN, opLex, newIdent, right, "", "", true}; //create assignment node
+            Node* assignNode = new Node{T_ASSIGN, opLex, newIdent, right, "", ""}; //create assignment node
             result = assignNode; //update result to be the assignment node
         } else {
             addSymbol(true, newname, type, "0");
         }
-        Node* parent = new Node{T_COMMA, ",", result, newIdent, "", "", true};
+        Node* parent = new Node{T_COMMA, ",", result, newIdent, "", ""};
         result = parent; //update result to be the new parent node
     }
     cout << "declare_list returning \n";
-    return result;
-}
+    return;
+} */
 
 Node* program (){
     cout << "program called \n";
+    
+    Node* root = nullptr;
+    Node* current = nullptr;
 
-    if (nextToken != T_INT_KEY && nextToken != T_FLOAT_KEY) {
-        return nullptr;
-    }
-
-    Node* firstDecl = declare_list();
-
-    while(nextToken == T_NEXT) {
-        lex(); //consume newline
+    // Process all declaration and assignment statements
+    while(nextToken != T_EOF) {
+        // Skip newlines
+        while(nextToken == T_NEXT) {
+            lex();
+        }
+        
+        if (nextToken == T_EOF) break;
+        
+        Node* stmt = nullptr;
+        
+        // Check if it's a declaration or assignment
+        if (nextToken == T_INT_KEY || nextToken == T_FLOAT_KEY) {
+            declare_list();
+        } else if (nextToken == T_IDENT) {
+            stmt = assign_list();
+        } else {
+            cout << "Syntax Error: unexpected token\n";
+            break;
+        }
+        
+        if (stmt) {
+            if (!root) {
+                root = stmt;
+                current = stmt;
+            } else {
+                // Chain statements together
+                Node* connector = new Node{T_NEXT, "\\n", current, stmt, "", ""};
+                current = connector;
+                root = connector;
+            }
+        }
     }
     
-    if (nextToken == T_EOF) {
-        return firstDecl;
-    }
-
-    if (nextToken == T_INT_KEY || nextToken == T_FLOAT_KEY) {
-        return declare_list();
-    } else if (nextToken == T_IDENT) {
-        return assign_list();
-    }
-    
-    return firstDecl;
-
     cout << "program returning \n";
-    return firstDecl;
-}
+    return root;
+} 
 
 
 int main () {
@@ -579,9 +681,15 @@ int main () {
     getChar();
     lex();
     Node* root = program();
-    determineExpectedType(root);
-    determineActualType(root);
-    generateIL(root);
+
+    if (root){
+        root-> expected_type = ""; //top-level has no expected type
+        determineExpectedType(root);
+        determineActualType(root);
+        cout << "\n=== IL CODE ===\n";
+        generateIL(root);
+    }
+    
     
     inputFile.close();
 
