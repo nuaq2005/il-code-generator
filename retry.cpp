@@ -7,8 +7,6 @@ int charClass;
 char lexeme [100];
 int nextChar; /* nextChar must be int to hold EOF */
 int lexLen;
-TokenType token;
-TokenType nextToken;
 ifstream inputFile;
 
 enum CharacterClass {
@@ -18,9 +16,13 @@ enum CharacterClass {
 enum TokenType {
     T_EOF, T_INT_CONST, T_FLOAT_CONST, T_IDENT,T_INT_KEY, T_FLOAT_KEY,
     T_ASSIGN, T_ADD, T_SUB, T_MULT, T_DIV,
-    T_LEFT_PAREN, T_RIGHT_PAREN, T_COMMA, T_NEXT
+    T_LEFT_PAREN, T_RIGHT_PAREN, T_COMMA, T_DOT, T_NEXT
 }; 
 
+TokenType nextToken;
+TokenType lookup(char ch);
+TokenType lex();
+void addChar();
 struct Node {
     TokenType token;
     string lexeme;
@@ -31,7 +33,14 @@ struct Node {
 };
 
 /* Function declarations for syntax analyzer */
-
+Node* expr();
+Node* term();
+Node* factor();
+Node* assign();
+Node* assign_list();
+Node* declare_list();
+Node* program();
+string currentType; //to hold the type of the current declaration
 
 /* Function declarations for lexical analyzer */
 TokenType lex();
@@ -114,7 +123,7 @@ TokenType lookup(char ch) {
             break;
         case '.':
             addChar();
-            nextToken = DOT;
+            nextToken = T_DOT;
             break;
         default:
             addChar();
@@ -139,7 +148,6 @@ void addChar() {
 and determine its character class */
 
 void getChar() {
-
     if(inputFile.eof()) {
         charClass = EOF;
         nextChar = EOF;
@@ -200,7 +208,7 @@ void getChar() {
              bool isFloat = false;
              addChar();
              getChar();
-             while (charClass == DIGIT || charClass == DOT ) { //loops through digits to form the full lexeme
+             while (charClass == DIGIT || charClass == T_DOT ) { //loops through digits to form the full lexeme
                 if (charClass == DOT) isFloat = true;
                 addChar();
                 getChar();
@@ -208,19 +216,21 @@ void getChar() {
              nextToken = isFloat ? T_FLOAT_CONST : T_INT_CONST; //if decimal point found, it is float literal
              break;
             }
+        case UNKNOWN: //if char is not letter or digit, it is either operator, parenthesis or unknown
+             lookup(nextChar);
+             if (nextToken != T_EOF) getChar(); //changed
+             break;
+        case EOF:
+             nextToken = T_EOF;
+                lexeme[0] = 'E';
+                lexeme[1] = 'O';
+                lexeme[2] = 'F';
+                lexeme[3] = 0;
+             break;
         }
         cout << "Next token is: " << nextToken << ", Next lexeme is " << lexeme << endl;
+         return nextToken;
     }
-
-/* Node */
-struct Node {
-    TokenType token;
-    string lexeme;
-    Node* left;
-    Node* right;
-    string actual_type; //to hold the actual type after type checking
-    string expected_type; //to hold the expected type during type checking
-};
 
 /* IL CODE GENERATOR */
 void generateIL(Node* node) {
@@ -327,7 +337,7 @@ void determineActualType(Node* node) {
 // <factor> --> <ident> | <int_lit> | <float_lit> | ( <expr> )
 
 Node* factor (){
-    Node *node = nullptr;    
+       
     if(nextToken == T_IDENT || nextToken == T_INT_CONST || nextToken == T_FLOAT_CONST){
         Node* node = new Node{nextToken, lexeme, nullptr, nullptr, "", ""}; //create node for factor
         lex(); //next token
@@ -349,7 +359,7 @@ Node* factor (){
 
 Node* term (){
     Node* left = factor();
-    lex(); //get the operator
+
     while(nextToken == T_MULT || nextToken == T_DIV) {
         TokenType op = nextToken;
         string opLex = lexeme;
@@ -428,56 +438,114 @@ Node* declare_list (){
 
    if(nextToken != T_INT_KEY && nextToken != T_FLOAT_KEY) {
         cout << "Expected type keyword \n";
+        return nullptr;
     }
-    string type = nextToken == T_INT_KEY ? "int" : "float";
+
+    string type = (nextToken == T_INT_KEY) ? "int" : "float";
     lex();
 
     //process first identifier (and optional assignment)
     if(nextToken != T_IDENT) {
         cout << "Expected identifier \n";
+        return nullptr;
     }
+
     string name = lexeme;
     Node* left = new Node{T_IDENT, name, nullptr, nullptr, type, ""}; //create node for identifier
     lex(); //consume identifier
 
+    Node *result = left;
     //check for assignment (optional)
     if (nextToken == T_ASSIGN){
         string op = lexeme;
         lex(); //consume '='
         Node* right = expr();
         Node* assignNode = new Node{T_ASSIGN, op, left, right, "", ""}; //create assignment node, left is ident, right is expr
+        result = assignNode; //update result to be the assignment node
     }
 
     //add symbol to symbol table
     addSymbol (true, name, type);
-
+    return result;
 }
 
 Node* program (){
-    
-    declare_list();
-    while(nextToken != T_EOF) {
+     Node* last = nullptr;
+
+    // If file is empty
+    if (nextToken == T_EOF) {
+        return nullptr;
+    }
+
+    // First top-level unit
+    if (nextToken == T_INT_KEY || nextToken == T_FLOAT_KEY) {
+        last = declare_list();
+    } else {
+        last = assign_list();
+    }
+
+    // Process the rest
+    while (nextToken != T_EOF) {
         if (nextToken == T_INT_KEY || nextToken == T_FLOAT_KEY) {
-            declare_list();
+            Node* n = declare_list();
+            if (n) last = n;
         } else {
-            assign_list();
+            Node* n = assign_list();
+            if (n) last = n;
         }
     }
+
+    // Guarantee return value
+    return last;
 }
 
 
-void main () {
-    /* Open input file and process contents */
-   inputFile.open("front.in");
+int main () {
+    
+    inputFile.open("front.in");
 
-   if (!inputFile.is_open()) {
-      cout << "ERROR - cannot open front.in \n";
-      return;
-   } else {
+    if (!inputFile.is_open()) {
+        cout << "ERROR - cannot open front.in\n";
+        return 1;
+    }
+
     getChar();
     lex();
-    program();
-   }
+    
+    cout << "=== IL CODE ===\n";
+    
+    do {
+        while (nextToken == T_NEXT) {
+            lex();
+        }
+        
+        if (nextToken == T_EOF) break;
+        
+        Node* statement_root = program();
+        
+        if (statement_root == nullptr) {
+            break;
+        }
+        
+        determineActualType(statement_root);
+        determineExpectedType(statement_root);
+        generateIL(statement_root);
+        
+    } while (nextToken != T_EOF);
+    
+    inputFile.close();
 
-   return;
+    cout << "\n=== SYMBOL TABLE ===\n";
+    for (int i = 0; i < symbolCount; i++) {
+        string type = symbolTable[i].type;
+        cout << symbolTable[i].name << "\tType: " << type 
+             << "\tAddress: " << symbolTable[i].lvalue << "\tValue: ";
+        
+        if (type == "int") {
+            cout << symbolTable[i].rvalue.int_value << endl;
+        } else {
+            cout << symbolTable[i].rvalue.float_value << endl;
+        }
+    }
+    return 0;
 }
