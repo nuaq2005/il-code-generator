@@ -8,6 +8,7 @@ int charClass;
 char lexeme [100];
 int nextChar; /* nextChar must be int to hold EOF */
 int lexLen;
+int idx;
 ifstream inputFile;
 
 enum CharacterClass {
@@ -21,7 +22,6 @@ enum TokenType {
 }; 
 
 TokenType list[50];
-int index = 0; //index for list array
 TokenType nextToken;
 TokenType lookup(char ch);
 TokenType lex();
@@ -285,7 +285,7 @@ bool isNext(int tokenType) {
 
 
 /* IL CODE GENERATOR */
-void generateIL(Node* node) {
+/*void generateIL(Node* node) {
     if (!node) return;
 
     //post-order traversal
@@ -293,8 +293,6 @@ void generateIL(Node* node) {
     generateIL(node->right);
 
     //generate IL code based on node type
-    string iorf = (node->actual_type == "int") ? "i" : "f";
-        cout << iorf;
         switch (node->token) {
             case T_IDENT:
             case T_INT_CONST:
@@ -319,6 +317,68 @@ void generateIL(Node* node) {
             default:
                 break;
         }
+}*/
+
+void generateIL(Node* node){
+    if (!node) return; //skip declarations
+
+    if(node-> token == T_ASSIGN){
+        cout << "push addr(" << node->left->lexeme << ")\n";
+
+        // Recursively read RHS expression
+        if(node -> right) generateIL(node -> right);
+
+        //tyoe conversion is I.actualType != I.expectedType
+        if (node -> actual_type != node -> expected_type) {
+            if (node -> actual_type == "int" && node -> expected_type == "float") {
+                cout << "itof " <<  "\n";
+            } else if (node -> actual_type == "float" && node -> expected_type == "int") {
+                cout << "ftoi " <<  "\n";
+            }
+        }
+
+        cout << "assign \n";
+        return;
+    }
+
+    // Post-order traversal
+    if (node->left) generateIL(node->left);
+    if (node->right) generateIL(node->right);
+
+    // Process leaf node
+    if (node->token == T_IDENT) {
+        cout << "push " << node->lexeme << "\n";
+    } else if (node->token == T_INT_CONST || node->token == T_FLOAT_CONST) {
+        cout << "push " << node->lexeme << "\n";
+    }
+    
+    // arithmetic ops
+    if (node->token >= T_ADD && node->token <= T_DIV) {
+        string leftType = node->left->actual_type;
+        string rightType = node->right->actual_type;
+        string resultType = node->actual_type;
+
+        if(leftType == "int" && resultType == "float") {
+            cout << "itof \n";
+        }
+
+        string iorf = (node->actual_type == "int") ? "i" : "f";
+        cout << iorf;
+        switch (node->token) {
+            case T_ADD:
+                cout << "add \n";
+                break;
+            case T_SUB:
+                cout << "sub \n";
+                break;
+            case T_MULT:
+                cout << "mul \n";
+                break;
+            case T_DIV:
+                cout << "div \n";
+                break;
+        }
+    }
 }
 
 /* Expected / Computed Type (pre-order)*/
@@ -388,13 +448,13 @@ void determineActualType(Node* node) {
 // <term> --> <factor> {(* | /) <factor>}
 // <factor> --> <ident> | <int_lit> | <float_lit> | ( <expr> )
 
+/*Syntax Analyzer*/
 Node* factor (){
-    cout << "factor called \n";
     Node* node = nullptr;
-
-    if(nextToken == T_IDENT || nextToken == T_INT_CONST || nextToken == T_FLOAT_CONST){
+    //determine which path to take
+    if (nextToken == T_IDENT || nextToken == T_INT_CONST || nextToken == T_FLOAT_CONST){
         node = new Node{nextToken, lexeme, nullptr, nullptr, "", ""}; //create node for factor
-       
+        
         //check symbol table for type
         if (nextToken == T_IDENT) {
             node->actual_type = lookupType(lexeme);
@@ -403,9 +463,9 @@ Node* factor (){
         } else if (nextToken == T_FLOAT_CONST) {
             node->actual_type = "float";
         }
+
         lex(); //next token
-        
-        return node;
+
     } else if (nextToken == T_LEFT_PAREN){
         lex(); //get past '('
         node = expr(); //go to expression
@@ -414,39 +474,43 @@ Node* factor (){
         } else {
             cout << "Syntax Error: Missing ')' \n";
         }
-        return node;
     } else {
         cout << "Syntax Error: Invalid Factor \n";
-        return nullptr;
     }
-    cout << "factor returning \n";
     return node;
 }
 
 Node* term (){
-    cout << "term called \n";
+
+    //first we must have a factor
     Node* left = factor();
 
-    while(nextToken == T_MULT || nextToken == T_DIV) {
+    //then we can have 0 or more (* | /) factor
+    while (nextToken == T_MULT || nextToken == T_DIV) {
         TokenType op = nextToken;
         string opLex = lexeme;
         lex(); //get the operator
-    
-        Node* right = factor(); //get the next factor
-        Node* parent = new Node{op, opLex, left, right, "", ""};
-        left = parent; //update left to be the new parent node
+       Node* right = factor(); //get the next factor
+       
+       Node* parent = new Node{op, opLex, left, right, "", ""};
+       left = parent; //update left to be the new parent node
     }
-    cout << "term returning \n";
+ 
     return left;
 }
 
-Node* expr (){
-    cout << "expr called \n";
+/* expr
+ Parses strings in the language generated by the rule:
+ <expr> -> <term> {(+ | -) <term>}
+ */
+
+Node* expr() {
+ 
     //print first term
     Node* left = term();
 
     //then we can have 0 or more (+ | - | *) term
-    while (nextToken == T_ADD|| nextToken == T_SUB) {
+    while (nextToken == T_ADD || nextToken == T_SUB) {
         TokenType op = nextToken;
         string opLex = lexeme;
         lex(); //get the operator
@@ -455,146 +519,68 @@ Node* expr (){
         Node* parent = new Node{op, opLex, left, right, "", ""};
         left = parent; //update left to be the new parent node
     }
-    cout << "expr returning \n";
+
     return left;
 }
 
-Node* assign(){
-    cout << "assign called \n";
-    
-    // <assign> --> IDENT = <expr>
-    
-    if (nextToken != T_IDENT) {
-        cout << "Syntax Error: expected identifier in assign\n";
-        return nullptr;
-    }
-    
-    string name = lexeme;
-    Node* left = new Node{T_IDENT, name, nullptr, nullptr, "", ""};
-    left->actual_type = lookupType(name);
-    lex(); // consume identifier
+// assign ->  <ident> = <expression>;
+Node* assign() {
 
-    if (nextToken != T_ASSIGN){
-        cout << "Syntax Error: expected '=' in assign\n";
-        return nullptr;
+    //first lexeme must be identifier
+    cout << list[idx - 2] << " " << T_IDENT << "\n";
+    if(list[idx - 2] != T_IDENT){ 
+        cout << "Syntax Error \n";
     }
+
+    Node* left = new Node{T_IDENT, lexeme, nullptr, nullptr, "", ""}; //create node for identifier
+    left -> actual_type = lookupType(lexeme); //get type from symbol table
     
+    cout << list[idx - 2] << " " << T_IDENT << "\n";
+    //second lexeme must be operator
+    if(list [idx - 1] != T_ASSIGN){
+        cout << "Syntax Error \n";
+    }
+
     string opLex = lexeme;
-    lex(); // consume '='
-    
-    Node* right = expr(); // Just an expression!
-    
-    Node* root = new Node{T_ASSIGN, opLex, left, right, "", ""};
-    cout << "assign returning \n";
+  
+    //third lexeme must be expression
+    Node* right = expr(); //we enter expression, which takes us through the terms/factors/operations
+    Node* root = new Node{T_ASSIGN, opLex, left, right, "", ""}; //create root node for assignment
     return root;
-} 
+}
 
-/*Node* assign_list(){
-    cout << "assign_list called \n";
-    
-    // Check if we have the pattern {ident =} which indicates chained assignment
-    // We need to peek ahead to determine if current ident is followed by = and then another ident with =
-    
-    if (nextToken != T_IDENT) {
-        cout << "Syntax Error: expected identifier in assign_list\n";
-        return nullptr;
-    }
-    
-    // Save the first identifier
-    string name = lexeme;
-    
-    lex(); // consume identifier
-    
-    if (nextToken != T_ASSIGN) {
-        cout << "Syntax Error: expected '=' in assign_list\n";
-        return nullptr;
-    }
-    
-    string opLex = lexeme;
-    lex(); // consume '='
-    
-    // Now check: is the next token an identifier?
-    if (nextToken == T_IDENT) {
-        // We need to peek further to see if there's an '=' after this identifier
-        // If yes, we have more chaining: recurse
-        // If no, we're at the final assignment: call assign()
-        
-        // Save state for peeking
-        int savedPos = inputFile.tellg();
-        int savedCharClass = charClass;
-        int savedNextChar = nextChar;
-        TokenType savedToken = nextToken;
-        int savedLexLen = lexLen;
-        char tempLexeme[100];
-        strcpy(tempLexeme, lexeme);
-        
-        lex(); // Get the token after the identifier
-        
-        bool hasEqualAfter = (nextToken == T_ASSIGN);
-        
-        // Restore state
-        inputFile.clear();
-        inputFile.seekg(savedPos);
-        charClass = savedCharClass;
-        nextChar = savedNextChar;
-        nextToken = savedToken;
-        lexLen = savedLexLen;
-        strcpy(lexeme, tempLexeme);
-        
-        Node* identNode = new Node{T_IDENT, name, nullptr, nullptr, "", ""};
-        identNode->actual_type = lookupType(name);
-        
-        Node* right = nullptr;
-        
-        if (hasEqualAfter) {
-            // More chaining: recurse into assign_list
-            right = assign_list();
-        } else {
-            // This is the last assignment: call assign
-            right = assign();
-        }
-        
-        Node* assignNode = new Node{T_ASSIGN, opLex, identNode, right, "", ""};
-        cout << "assign_list returning \n";
-        return assignNode;
-        
-    } else {
-        // Next token is not an identifier, so we hit an expression
-        // We need to parse this as: current_ident = expr
-        // But we've already consumed the ident and =, so we just parse expr
-        
-        Node* identNode = new Node{T_IDENT, name, nullptr, nullptr, "", ""};
-        identNode->actual_type = lookupType(name);
-        
-        Node* right = expr();
-        
-        Node* assignNode = new Node{T_ASSIGN, opLex, identNode, right, "", ""};
-        cout << "assign_list returning \n";
-        return assignNode;
-    }
-} */
-
+// <assign_list> -> {<ident> =} <assign>;
+//edit tmrw
 Node* assign_list(){
-    cout << "assign_list called \n";
 
     //process zero or more {IDENT =}
     Node* left = nullptr;
-    while (nextToken == T_IDENT) {
-         if(!isNext(T_ASSIGN)) { 
-            break; //exit loop if next token is not '='
-        }
-        string identName = lexeme;
-        Node* newIdent = new Node{T_IDENT, identName, nullptr, nullptr, lookupType(identName), ""}; //create node for identifier
+
+    if (nextToken == T_IDENT) {
+        Node* identNode = new Node{T_IDENT, lexeme, nullptr, nullptr, "", ""}; //create node for identifier
+        list[idx++] = nextToken; //store token in list
         lex(); //consume identifier
 
+        if (nextToken != T_ASSIGN){
+            cout << "Syntax Error: expected '=' \n";
+        }
+
         string opLex = lexeme;
+        list[idx++] = nextToken; //store token in list
         lex(); //consume '='
-        Node* assignNode = new Node{T_ASSIGN, opLex, newIdent, nullptr, "", ""}; //create assignment node
-        left = assignNode; //update left to be the assignment node
+        Node* right = assign_list(); //process the next assignment
+
+        Node* root = new Node{T_ASSIGN, opLex, identNode, right, "", ""}; //create assignment node
+        left = root; //update left to be the assignment node
+
+        return root;
     }
 
-    return left;
+    Node* root = assign(); //process the final assignment
+    return root;
 }
+
+
 void declare_list (){
     cout << "declare_list called \n";
     
