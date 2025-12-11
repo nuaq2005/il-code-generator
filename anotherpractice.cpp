@@ -576,8 +576,10 @@ Node* assign() {
         cout << "Syntax Error \n";
     }
 
-    Node* left = new Node{T_IDENT, lexeme, nullptr, nullptr, "", ""}; //create node for identifier
-    left -> actual_type = lookupType(lexeme); //get type from symbol table
+    string name = lexeme;
+
+    Node* left = new Node{T_IDENT, name, nullptr, nullptr, "", ""}; //create node for identifier
+    left -> actual_type = lookupType(name); //get type from symbol table
     
     cout << list[idx - 2] << " " << T_IDENT << "\n";
     //second lexeme must be operator
@@ -601,7 +603,8 @@ Node* assign_list(){
     Node* left = nullptr;
 
     if (nextToken == T_IDENT) {
-        Node* identNode = new Node{T_IDENT, lexeme, nullptr, nullptr, "", ""}; //create node for identifier
+        string name = lexeme;
+        Node* identNode = new Node{T_IDENT, name, nullptr, nullptr, "", ""}; //create node for identifier
         list[idx++] = nextToken; //store token in list
         lex(); //consume identifier
 
