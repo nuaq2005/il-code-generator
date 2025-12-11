@@ -571,19 +571,20 @@ Node* expr() {
 Node* assign() {
 
     //first lexeme must be identifier
-    cout << list[idx - 2] << " " << T_IDENT << "\n";
-    if(list[idx - 2] != T_IDENT){ 
+    cout << list[idx] << " " << T_IDENT << "\n";
+    if(list[idx] != T_IDENT){ 
         cout << "Syntax Error \n";
     }
 
     string name = lexeme;
 
-    Node* left = new Node{T_IDENT, name, nullptr, nullptr, "", ""}; //create node for identifier
-    left -> actual_type = lookupType(name); //get type from symbol table
+    Node* left = new Node{T_IDENT, lexeme, nullptr, nullptr, "", ""}; //create node for identifier
+    left -> actual_type = lookupType(lexeme); //get type from symbol table
     
-    cout << list[idx - 2] << " " << T_IDENT << "\n";
+
+    cout << list[idx] << " " << T_IDENT << "\n";
     //second lexeme must be operator
-    if(list [idx - 1] != T_ASSIGN){
+    if(list [idx++] != T_ASSIGN){
         cout << "Syntax Error \n";
     }
 
@@ -601,15 +602,16 @@ Node* assign_list(){
 
     //process zero or more {IDENT =}
     Node* left = nullptr;
+    bool isChained = true;
 
     if (nextToken == T_IDENT) {
-        string name = lexeme;
-        Node* identNode = new Node{T_IDENT, name, nullptr, nullptr, "", ""}; //create node for identifier
+        Node* identNode = new Node{T_IDENT, lexeme, nullptr, nullptr, "", ""}; //create node for identifier
         list[idx++] = nextToken; //store token in list
         lex(); //consume identifier
 
         if (nextToken != T_ASSIGN){
             cout << "Syntax Error: expected '=' \n";
+            isChained = false;
         }
 
         string opLex = lexeme;
@@ -622,7 +624,9 @@ Node* assign_list(){
 
         return root;
     }
-
+    if (!isChained) {
+        idx -=2; //rollback idx if not chained
+    }
     Node* root = assign(); //process the final assignment
     return root;
 }
