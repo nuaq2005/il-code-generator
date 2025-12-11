@@ -39,7 +39,7 @@ struct Node {
 Node* expr();
 Node* term();
 Node* factor();
-Node* assign();
+Node* assign(Node* ptr);
 Node* assign_list();
 void declare_list();
 Node* program();
@@ -568,21 +568,22 @@ Node* expr() {
 }
 
 // assign ->  <ident> = <expression>;
-Node* assign() {
-
+Node* assign(Node* leftNode = nullptr) {
+Node* left;
     //first lexeme must be identifier
-    cout << list[idx] << " " << T_IDENT << "\n";
-    if(list[idx] != T_IDENT){ 
-        cout << "Syntax Error \n";
+    if (leftNode != nullptr){
+        left = leftNode;
+        idx++;
+    } else {
+        if(list[idx] != T_IDENT){
+            cout << "Syntax Error \n";
+        }
+        string name = lexeme;
+
+        left = new Node{T_IDENT, lexeme, nullptr, nullptr, "", ""}; //create node for identifier
+        idx++;
     }
-
-    string name = lexeme;
-
-    Node* left = new Node{T_IDENT, lexeme, nullptr, nullptr, "", ""}; //create node for identifier
-    left -> actual_type = lookupType(lexeme); //get type from symbol table
     
-
-    cout << list[idx] << " " << T_IDENT << "\n";
     //second lexeme must be operator
     if(list [idx++] != T_ASSIGN){
         cout << "Syntax Error \n";
@@ -596,39 +597,34 @@ Node* assign() {
     return root;
 }
 
-// <assign_list> -> {<ident> =} <assign>;
-//edit tmrw
 Node* assign_list(){
 
-    //process zero or more {IDENT =}
     Node* left = nullptr;
     bool isChained = true;
 
     if (nextToken == T_IDENT) {
-        Node* identNode = new Node{T_IDENT, lexeme, nullptr, nullptr, "", ""}; //create node for identifier
-        list[idx++] = nextToken; //store token in list
-        lex(); //consume identifier
 
-        if (nextToken != T_ASSIGN){
-            cout << "Syntax Error: expected '=' \n";
-            isChained = false;
-        }
+        Node* identNode = new Node{T_IDENT, lexeme, nullptr, nullptr, "", ""};
+        list[idx++] = nextToken;
+        left = identNode;
+        lex(); // consume identifier
 
-        string opLex = lexeme;
-        list[idx++] = nextToken; //store token in list
-        lex(); //consume '='
-        Node* right = assign_list(); //process the next assignment
+        if (nextToken == T_ASSIGN) {
 
-        Node* root = new Node{T_ASSIGN, opLex, identNode, right, "", ""}; //create assignment node
-        left = root; //update left to be the assignment node
+            string opLex = lexeme;
+            list[idx++] = nextToken;
+            lex(); // consume '='
 
-        return root;
+            Node* right = assign_list();
+
+            Node* root = new Node{T_ASSIGN, opLex, identNode, right, "", ""};
+            left = root;
+
+            return root;
+        } 
     }
-    if (!isChained) {
-        idx -=2; //rollback idx if not chained
-    }
-    Node* root = assign(); //process the final assignment
-    return root;
+    Node* assignNode = assign(left);
+    return assignNode;
 }
 
 

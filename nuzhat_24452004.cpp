@@ -311,30 +311,6 @@ void getChar() {
         return nextToken;
     }
 
-    /* Is Next Function to peek ahead */
-bool isNext(int tokenType) {
-    int currentPos = inputFile.tellg(); // Save current position
-    int savedCharClass = charClass;
-    int savedNextChar = nextChar;
-    int savedLexLen = lexLen;
-    char savedLexeme[100];
-    strcpy(savedLexeme, lexeme);
-    TokenType savedNextToken = nextToken;
-
-    lex(); // Get the next token
-    bool isMatch = (nextToken == tokenType);
-    // Restore saved state
-    inputFile.clear(); // Clear any EOF flags
-    inputFile.seekg(currentPos);
-    charClass = savedCharClass;
-    nextChar = savedNextChar;
-    lexLen = savedLexLen;
-    strcpy(lexeme, savedLexeme);
-    nextToken = savedNextToken;
-
-    return isMatch;
-}
-
 /* Intermediate Code Generation */
 void generateIL(Node* node){
     if (!node) return; //skip declarations
@@ -762,6 +738,7 @@ int main () {
 
     if (root){
         root-> expected_type = ""; //top-level has no expected type
+        
         determineExpectedType(root);
         determineActualType(root);
         cout << "\n=== IL CODE ===\n";
