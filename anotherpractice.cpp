@@ -52,11 +52,39 @@ void addChar();
 void getChar();
 void getNonBlank();
 
-struct Stack {
+/* Stack for IL Generation */
+struct ILStack {
+    string items[100];
     int top;
-    unsigned capacity;
-    int* array;
+    
+    ILStack() : top(-1) {}
+    
+    void push(const string& item) {
+        if (top < 99) {
+            items[++top] = item;
+        }
+    }
+    
+    string pop() {
+        if (top >= 0) {
+            return items[top--];
+        }
+        return "";
+    }
+    
+    string peek() {
+        if (top >= 0) {
+            return items[top];
+        }
+        return "";
+    }
+    
+    bool isEmpty() {
+        return top == -1;
+    }
 };
+
+ILStack ilStack;
 
 /* Symbol Table*/
 struct Symbol {
@@ -88,6 +116,30 @@ void addSymbol (bool isIdent, const string &lexeme, const string &type,const str
     else symbolTable[symbolCount].rvalue.float_value = stof(value);
     symbolTable[symbolCount].lvalue = rand(); //initialize lvalue
     symbolCount++;
+}
+
+void modifyType (const string &lexeme, const string &type) {
+    for(int i = 0; i < symbolCount; i++) {
+        if (symbolTable[i].name == lexeme) {
+            symbolTable[i].type = type;
+            return;
+        }
+    }   
+    cout << "Undeclared identifier: " << lexeme << "\n";
+}
+
+void modifyValue (const string &lexeme, const string &value) {
+    for(int i = 0; i < symbolCount; i++) {
+        if (symbolTable[i].name == lexeme) {
+            if(symbolTable[i].type == "int") {
+                symbolTable[i].rvalue.int_value = stoi(value);
+            } else if(symbolTable[i].type == "float") {
+                symbolTable[i].rvalue.float_value = stof(value);
+            }
+            return;
+        }
+    }   
+    cout << "Undeclared identifier: " << lexeme << "\n";
 }
 
 /* Lookup type of identifier in symbol table */
@@ -283,47 +335,13 @@ bool isNext(int tokenType) {
     return isMatch;
 }
 
-
-/* IL CODE GENERATOR */
-/*void generateIL(Node* node) {
-    if (!node) return;
-
-    //post-order traversal
-    generateIL(node->left);
-    generateIL(node->right);
-
-    //generate IL code based on node type
-        switch (node->token) {
-            case T_IDENT:
-            case T_INT_CONST:
-            case T_FLOAT_CONST:
-                cout << "push " << node->lexeme << "\n";
-                break;
-            case T_ADD:
-                cout << "add \n";
-                break;
-            case T_SUB:
-                cout << "sub \n";
-                break;
-            case T_MULT:
-                cout << "mul \n";
-                break;
-            case T_DIV:
-                cout << "div \n";
-                break;
-            case T_ASSIGN:
-                cout << "assign \n";
-                break;
-            default:
-                break;
-        }
-}*/
-
+/* Intermediate Code Generation */
 void generateIL(Node* node){
     if (!node) return; //skip declarations
 
     if(node-> token == T_ASSIGN){
         cout << "push addr(" << node->left->lexeme << ")\n";
+        ilStack.push("addr(" + node->left->lexeme + ")");
 
         // Recursively read RHS expression
         if(node -> right) generateIL(node -> right);
@@ -332,8 +350,10 @@ void generateIL(Node* node){
         if (node -> actual_type != node -> expected_type) {
             if (node -> actual_type == "int" && node -> expected_type == "float") {
                 cout << "itof " <<  "\n";
+                modifyType(node->lexeme, "float");
             } else if (node -> actual_type == "float" && node -> expected_type == "int") {
                 cout << "ftoi " <<  "\n";
+                modifyType(node->lexeme, "int");
             }
         }
 
@@ -348,34 +368,58 @@ void generateIL(Node* node){
     // Process leaf node
     if (node->token == T_IDENT) {
         cout << "push " << node->lexeme << "\n";
+        ilStack.push(node->lexeme);
+
     } else if (node->token == T_INT_CONST || node->token == T_FLOAT_CONST) {
         cout << "push " << node->lexeme << "\n";
+        ilStack.push(node->lexeme);
     }
     
     // arithmetic ops
     if (node->token >= T_ADD && node->token <= T_DIV) {
-        string leftType = node->left->actual_type;
-        string rightType = node->right->actual_type;
-        string resultType = node->actual_type;
+        string leftType = node->left->expected_type;
+        string rightType = node->right->expected_type;
+        string resultType = node->expected_type;
 
         if(leftType == "int" && resultType == "float") {
             cout << "itof \n";
         }
 
-        string iorf = (node->actual_type == "int") ? "i" : "f";
+        string iorf = (node->expected_type == "int") ? "i" : "f";
         cout << iorf;
+        string opd1, opd2;
         switch (node->token) {
             case T_ADD:
-                cout << "add \n";
+                cout << "add \n" << node-> right-> lexeme << " " << node-> left-> lexeme << "\n";
+                opd1 = ilStack.peek();
+                ilStack.pop();
+                opd2 = ilStack.peek();
+                ilStack.pop();
+                ilStack.push( opd2 + "+" + opd1);
                 break;
             case T_SUB:
-                cout << "sub \n";
+                cout << "sub \n" << node-> right-> lexeme << " " << node-> left-> lexeme << "\n";
+                opd1 = ilStack.peek();
+                ilStack.pop();
+                opd2 = ilStack.peek();
+                ilStack.pop();
+                ilStack.push( opd2 + "-" + opd1);
                 break;
             case T_MULT:
-                cout << "mul \n";
+                cout << "mul \n" << node-> right-> lexeme << " " << node-> left-> lexeme << "\n";
+                opd1 = ilStack.peek();
+                ilStack.pop();
+                opd2 = ilStack.peek();
+                ilStack.pop();
+                ilStack.push( opd2 + "*" + opd1);
                 break;
             case T_DIV:
-                cout << "div \n";
+                cout << "div \n" << node-> right-> lexeme << " " << node-> left-> lexeme << "\n";
+                opd1 = ilStack.peek();
+                ilStack.pop();
+                opd2 = ilStack.peek();
+                ilStack.pop();
+                ilStack.push( opd2 + "/" + opd1);
                 break;
         }
     }
