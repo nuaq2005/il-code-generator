@@ -330,15 +330,15 @@ void generateIL(Node* node){
 
         //convert types if actual type of operands is different from result type of node (computed type)
         if(leftType == "int" && resultType == "float") {
-            cout << "itof" << node->left->lexeme << "\n";
+            cout << "itof" << "\n";
         } else if(leftType == "float" && resultType == "int") {
-            cout << "ftoi" << node->left->lexeme << "\n";
+            cout << "ftoi" << "\n";
         } 
 
         if(rightType == "int" && resultType == "float") {
-            cout << "itof" << node->right->lexeme << "\n";
+            cout << "itof" << "\n";
         } else if (rightType == "float" && resultType == "int") {
-            cout << "ftoi" << node->right->lexeme << "\n";
+            cout << "ftoi" << "\n";
         }
 
         string iorf = (node->actual_type == "int") ? "i" : "f";
@@ -579,7 +579,7 @@ void declare_list (){
         Node* right = expr();
         
         if(right->token == T_FLOAT_CONST || right->token == T_INT_CONST) {
-            addSymbol(false, name, type, right->lexeme);
+            addSymbol(true, name, type, right->lexeme);
         } else {
             addSymbol(true, name, type, "0");
         }
@@ -605,7 +605,7 @@ void declare_list (){
             Node* right = expr();
             
             if(right->token == T_FLOAT_CONST || right->token == T_INT_CONST) {
-                addSymbol(false, newname, type, right->lexeme);
+                addSymbol(true, newname, type, right->lexeme);
             } else {
                 addSymbol(true, newname, type, "0");
             }
@@ -688,7 +688,8 @@ int main () {
     cout << "\n - SYMBOL TABLE -\n";
     for (int i = 0; i < symbolCount; i++) {
         string type = symbolTable[i].type;
-        cout << symbolTable[i].name << "\tType: " << type 
+        string is_ident = (symbolTable[i].is_ident) ? "true" : "false";
+        cout << "\tIs Ident:" << is_ident << "\t" << symbolTable[i].name << "\tType: " << type 
              << "\tAddress: " << symbolTable[i].lvalue << "\tValue: ";
 
         if (type == "int") {

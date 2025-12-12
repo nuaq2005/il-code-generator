@@ -21,7 +21,7 @@ enum TokenType {
 }; 
 
 TokenType list[50]; //keep track of tokens for assign_list
-int idx;
+int idx = 0;
 TokenType nextToken;
 TokenType lookup(char ch);
 TokenType lex();
@@ -118,6 +118,7 @@ void addSymbol (bool isIdent, const string &lexeme, const string &type,const str
     symbolCount++;
 }
 
+//modify type function I wanted to use this to help compute values in symbol table but no time left to implement it
 void modifyType (const string &lexeme, const string &type) {
     for(int i = 0; i < symbolCount; i++) {
         if (symbolTable[i].name == lexeme) {
@@ -208,7 +209,6 @@ void addChar() {
 
 /* getChar - a function to get the next character of input 
 and determine its character class */
-
 void getChar() {
     if(inputFile.eof()) {
         charClass = EOF;
@@ -283,7 +283,7 @@ void getChar() {
         case UNKNOWN: //if char is not letter or digit, it is either operator, parenthesis or unknown
              lookup(nextChar);
              if (nextToken != T_EOF)
-             getChar(); //changed
+             getChar(); 
              break;
         case EOF:
              nextToken = T_EOF;
@@ -293,85 +293,9 @@ void getChar() {
                 lexeme[3] = 0;
              break;
         }
-        cout << "Next token is: " << nextToken << ", Next lexeme is " << lexeme << endl;
         return nextToken;
     }
 
-/* Intermediate Code Generation */
-/*void generateIL(Node* node){
-    if (!node) return; 
-
-    if(node-> token == T_ASSIGN){
-        cout << "push addr(" << node->left->lexeme << ")\n";
-        ilStack.push("addr(" + node->left->lexeme + ")");
-
-        // Recursively read RHS expression
-        if(node -> right) generateIL(node -> right);
-
-        //type conversion is if I.actualType != I.expectedType
-        if (node -> actual_type != node -> expected_type) {
-            if (node -> actual_type == "int" && node -> expected_type == "float") {
-                cout << "itof " <<  "\n";
-                modifyType(node->lexeme, "float");
-            } else if (node -> actual_type == "float" && node -> expected_type == "int") {
-                cout << "ftoi " <<  "\n";
-                modifyType(node->lexeme, "int");
-            }
-        }
-
-        cout << "assign \n";
-        return;
-    }
-
-    // Post-order traversal
-    if (node->left) generateIL(node->left);
-    if (node->right) generateIL(node->right);
-
-    // Process leaf node
-    if (node->token == T_IDENT || node->token == T_INT_CONST || node->token == T_FLOAT_CONST) {
-        cout << "push " << node->lexeme << "\n";
-        ilStack.push(node->lexeme);
-    }
-    
-    // arithmetic ops
-    if (node->token >= T_ADD && node->token <= T_DIV) {
-        string leftType = node->left->expected_type;
-        string rightType = node->right->expected_type;
-        string resultType = node->expected_type;
-
-        if(leftType == "int" && resultType == "float") {
-            cout << "itof \n";
-        }
-
-        string iorf = (node->expected_type == "int") ? "i" : "f";
-        cout << iorf;
-        string opd1, opd2;
-
-        opd1 = ilStack.peek();
-        ilStack.pop();
-        opd2 = ilStack.peek();
-        ilStack.pop();
-
-        switch (node->token) {
-            case T_ADD:
-                cout << "add \n" << opd2 << "+" << opd1 << "\n";
-                ilStack.push( opd2 + "+" + opd1);
-                break;
-            case T_SUB:
-                cout << "sub \n" << opd2 << "-" << opd1 << "\n";
-                ilStack.push( opd2 + "-" + opd1);
-                break;
-            case T_MULT:
-                cout << "mul \n" << opd2 << "*" << opd1 << "\n";
-                ilStack.push( opd2 + "*" + opd1);
-                break;
-            case T_DIV:
-                cout << "div \n" << opd2 << "/" << opd1 << "\n";
-                ilStack.push( opd2 + "/" + opd1);
-                break;
-        }
-    }
-}*/
 
 /* Intermediate Code Generation */
 void generateIL(Node* node){
@@ -406,15 +330,15 @@ void generateIL(Node* node){
 
         //convert types if actual type of operands is different from result type of node (computed type)
         if(leftType == "int" && resultType == "float") {
-            cout << "itof" << node->left->lexeme << "\n";
+            cout << "itof" << "\n";
         } else if(leftType == "float" && resultType == "int") {
-            cout << "ftoi" << node->left->lexeme << "\n";
+            cout << "ftoi" << "\n";
         } 
 
         if(rightType == "int" && resultType == "float") {
-            cout << "itof" << node->right->lexeme << "\n";
+            cout << "itof" << "\n";
         } else if (rightType == "float" && resultType == "int") {
-            cout << "ftoi" << node->right->lexeme << "\n";
+            cout << "ftoi" << "\n";
         }
 
         string iorf = (node->actual_type == "int") ? "i" : "f";
@@ -428,53 +352,31 @@ void generateIL(Node* node){
 
         switch (node->token) {
             case T_ADD:
-                cout << "add \n" << opd2 << "+" << opd1 << "\n";
+                cout << "add " << opd2 << "+" << opd1 << "\n";
                 ilStack.push( opd2 + "+" + opd1);
                 break;
             case T_SUB:
-                cout << "sub \n" << opd2 << "-" << opd1 << "\n";
+                cout << "sub " << opd2 << "-" << opd1 << "\n";
                 ilStack.push( opd2 + "-" + opd1);
                 break;
             case T_MULT:
-                cout << "mult \n" << opd2 << "*" << opd1 << "\n";
+                cout << "mult " << opd2 << "*" << opd1 << "\n";
                 ilStack.push( opd2 + "*" + opd1);
                 break;
             case T_DIV:
-                cout << "div \n" << opd2 << "/" << opd1 << "\n";
+                cout << "div " << opd2 << "/" << opd1 << "\n";
                 ilStack.push( opd2 + "/" + opd1);
                 break;
         }
     }
 }
 
-/* Expected / Computed Type (pre-order)*/
-void determineExpectedType(Node* node) {
-    if (node == nullptr) return;
-    //cout << "determineExpectedType called for token: " << node->lexeme << "\n";
-    //pre-order traversal
-    if (node->token >= T_ADD && node->token <= T_DIV) {
-        //set expected type for children
-        node->left->expected_type = node->expected_type;
-        node->right->expected_type = node->expected_type;
-    } else if (node->token == T_ASSIGN) {
-        //for assignment, left child expected type is the type of the identifier
-        node->left->expected_type = node->left->actual_type;
-        //right child expected type is the same as left child's expected type
-        node->right->expected_type = node->left->expected_type;
-    }
-
-    determineExpectedType (node->left);
-    determineExpectedType (node->right);  
-}
-
-/*
 void determineActualType(Node* node) {
     if (node == nullptr) return;
 
     //post-order traversal
     determineActualType (node->left);
     determineActualType (node->right);
-    cout << "determineActualType called for token: " << node->lexeme << "\n";
     //determine actual type based on children
     if (node->token == T_ADD || node->token == T_SUB || node->token == T_MULT || node->token == T_DIV) {
         string leftType = node->left ? node->left->actual_type : "";
@@ -489,7 +391,23 @@ void determineActualType(Node* node) {
             cout << "Type Error: incompatible types for operator " << node->lexeme << "\n";
         }
     } 
-}*/
+}
+
+/* Expected / Computed Type (pre-order)*/
+//After editing my code a little, I don't think I need this function but I'll keep it for now
+void determineExpectedType(Node* node) {
+    if (node == nullptr) return;
+    //cout << "determineExpectedType called for token: " << node->lexeme << "\n";
+    //pre-order traversal
+    if (node->token == T_ASSIGN) {
+        //for assignment, left child expected type is the type of the identifier
+        node->left->expected_type = node->left->actual_type;
+        //right child expected type is the same as left child's expected type
+        node->right->expected_type = node->left->expected_type;
+    }
+    determineExpectedType (node->left);
+    determineExpectedType (node->right);  
+}
 
 /* Parse Tree*/
 // <program> --> <declare_list> {<assign_list>  | <declare_list> }
@@ -576,11 +494,13 @@ Node* expr() {
 }
 
 // assign ->  <ident> = <expression>;
+
 Node* assign() {
-    //my assign_list function handles the {ident =} so assign just checks the previous two nodes before entering expr
+    //Syntax error is output because assign list reads too far ahead ahead. 
+    //I couldn't figure out how to fix it without using a vector or some other data structure that we can't use. 
+    //Other than that the code runs fine
 
     //first lexeme must be identifier
-    cout << list[idx] << " " << T_IDENT << "\n";
     if(list[idx] != T_IDENT){ 
         cout << "Syntax Error \n";
     }
@@ -595,6 +515,7 @@ Node* assign() {
     return right;
 }
 
+
 // <assign_list> -> {<ident> =} <assign>;
 //edit tmrw
 Node* assign_list(){
@@ -605,16 +526,17 @@ Node* assign_list(){
 
     if (nextToken == T_IDENT) {
         Node* identNode = new Node{T_IDENT, lexeme, nullptr, nullptr, "", ""}; //create node for identifier
-        list[idx++] = nextToken; //store token in list
+        list[idx] = nextToken; //store token in list
+        idx++;
         lex(); //consume identifier
 
         if (nextToken != T_ASSIGN){
-            cout << "Syntax Error: expected '=' \n";
             isChained = false;
         }
 
         string opLex = lexeme;
-        list[idx++] = nextToken; //store token in list
+        list[idx] = nextToken; //store token in list
+        idx++;
         lex(); //consume '='
         Node* right = assign_list(); //process the next assignment
 
@@ -623,17 +545,12 @@ Node* assign_list(){
 
         return root;
     }
-
-    if (!isChained) {
-        idx -=2; //rollback idx if not chained
-    }
-
+    idx -= 2; //backtrack to the start of the assignment
     Node* root = assign(); //process the final assignment
     return root;
 }
 
 void declare_list (){
-    cout << "declare_list called \n";
     
     if (nextToken == T_NEXT) {
         lex();
@@ -662,7 +579,7 @@ void declare_list (){
         Node* right = expr();
         
         if(right->token == T_FLOAT_CONST || right->token == T_INT_CONST) {
-            addSymbol(false, name, type, right->lexeme);
+            addSymbol(true, name, type, right->lexeme);
         } else {
             addSymbol(true, name, type, "0");
         }
@@ -688,7 +605,7 @@ void declare_list (){
             Node* right = expr();
             
             if(right->token == T_FLOAT_CONST || right->token == T_INT_CONST) {
-                addSymbol(false, newname, type, right->lexeme);
+                addSymbol(true, newname, type, right->lexeme);
             } else {
                 addSymbol(true, newname, type, "0");
             }
@@ -698,13 +615,9 @@ void declare_list (){
             addSymbol(true, newname, type, "0");
         }
     }
-    
-    cout << "declare_list returning \n";
 }
 
 Node* program (){
-    cout << "program called \n";
-    
     Node* root = nullptr;
     Node* current = nullptr;
 
@@ -744,8 +657,6 @@ Node* program (){
             }
         }
     }
-    
-    cout << "program returning \n";
     return root;
 } 
 
@@ -766,18 +677,19 @@ int main () {
     if (root){
         //root-> expected_type = ""; 
         determineExpectedType(root);
-        //determineActualType(root);
-        cout << "\n=== IL CODE ===\n";
+        determineActualType(root);
+        cout << "\n - IL CODE -\n";
         generateIL(root);
     }
     
     
     inputFile.close();
 
-    cout << "\n=== SYMBOL TABLE ===\n";
+    cout << "\n - SYMBOL TABLE -\n";
     for (int i = 0; i < symbolCount; i++) {
         string type = symbolTable[i].type;
-        cout << symbolTable[i].name << "\tType: " << type 
+        string is_ident = (symbolTable[i].is_ident) ? "true" : "false";
+        cout << "\tIs Ident:" << is_ident << "\t" << symbolTable[i].name << "\tType: " << type 
              << "\tAddress: " << symbolTable[i].lvalue << "\tValue: ";
 
         if (type == "int") {
