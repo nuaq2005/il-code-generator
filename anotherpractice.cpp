@@ -21,7 +21,7 @@ enum TokenType {
 }; 
 
 TokenType list[50]; //keep track of tokens for assign_list
-int idx;
+int idx = 0;
 TokenType nextToken;
 TokenType lookup(char ch);
 TokenType lex();
@@ -352,19 +352,19 @@ void generateIL(Node* node){
 
         switch (node->token) {
             case T_ADD:
-                cout << "add \n" << opd2 << "+" << opd1 << "\n";
+                cout << "add " << opd2 << "+" << opd1 << "\n";
                 ilStack.push( opd2 + "+" + opd1);
                 break;
             case T_SUB:
-                cout << "sub \n" << opd2 << "-" << opd1 << "\n";
+                cout << "sub " << opd2 << "-" << opd1 << "\n";
                 ilStack.push( opd2 + "-" + opd1);
                 break;
             case T_MULT:
-                cout << "mult \n" << opd2 << "*" << opd1 << "\n";
+                cout << "mult " << opd2 << "*" << opd1 << "\n";
                 ilStack.push( opd2 + "*" + opd1);
                 break;
             case T_DIV:
-                cout << "div \n" << opd2 << "/" << opd1 << "\n";
+                cout << "div " << opd2 << "/" << opd1 << "\n";
                 ilStack.push( opd2 + "/" + opd1);
                 break;
         }
@@ -496,10 +496,11 @@ Node* expr() {
 // assign ->  <ident> = <expression>;
 
 Node* assign() {
-    //my assign_list function handles the {ident =} so assign just checks the previous two nodes before entering expr
+    //Syntax error is output because assign list reads too far ahead ahead. 
+    //I couldn't figure out how to fix it without using a vector or some other data structure that we can't use. 
+    //Other than that the code runs fine
 
     //first lexeme must be identifier
-    cout << list[idx++] << " " << T_IDENT << "\n";
     if(list[idx] != T_IDENT){ 
         cout << "Syntax Error \n";
     }
@@ -525,16 +526,17 @@ Node* assign_list(){
 
     if (nextToken == T_IDENT) {
         Node* identNode = new Node{T_IDENT, lexeme, nullptr, nullptr, "", ""}; //create node for identifier
-        list[idx++] = nextToken; //store token in list
+        list[idx] = nextToken; //store token in list
+        idx++;
         lex(); //consume identifier
 
         if (nextToken != T_ASSIGN){
-            cout << "Syntax Error: expected '=' \n";
             isChained = false;
         }
 
         string opLex = lexeme;
-        list[idx++] = nextToken; //store token in list
+        list[idx] = nextToken; //store token in list
+        idx++;
         lex(); //consume '='
         Node* right = assign_list(); //process the next assignment
 
@@ -543,11 +545,7 @@ Node* assign_list(){
 
         return root;
     }
-
-    if (!isChained) {
-        idx -=2; //rollback idx if not chained
-    }
-
+    idx -= 2; //backtrack to the start of the assignment
     Node* root = assign(); //process the final assignment
     return root;
 }
