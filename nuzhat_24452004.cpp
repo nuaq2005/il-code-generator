@@ -298,7 +298,7 @@ void getChar() {
     }
 
 /* Intermediate Code Generation */
-void generateIL(Node* node){
+/*void generateIL(Node* node){
     if (!node) return; 
 
     if(node-> token == T_ASSIGN){
@@ -371,6 +371,80 @@ void generateIL(Node* node){
                 break;
         }
     }
+}*/
+
+/* Intermediate Code Generation */
+void generateIL(Node* node){
+    if (!node) return; 
+
+    if(node-> token == T_ASSIGN){
+        cout << "push addr(" << node->left->lexeme << ")\n";
+        ilStack.push("addr(" + node->left->lexeme + ")");
+        
+        // Recursively read RHS expression
+        if(node -> right) generateIL(node -> right);
+
+        cout << "assign \n";
+        return;
+    }
+
+    // Post-order traversal
+    if (node->left) generateIL(node->left);
+    if (node->right) generateIL(node->right);
+
+    // Process leaf node
+    if (node->token == T_IDENT || node->token == T_INT_CONST || node->token == T_FLOAT_CONST) {
+        cout << "push " << node->lexeme << "\n";
+        ilStack.push(node->lexeme);
+    }
+    
+    // arithmetic ops
+    if (node->token >= T_ADD && node->token <= T_DIV) {
+        string leftType = node->left->actual_type;
+        string rightType = node->right->actual_type;
+        string resultType = node->actual_type;
+
+        //convert types if actual type of operands is different from result type of node (computed type)
+        if(leftType == "int" && resultType == "float") {
+            cout << "itof" << node->left->lexeme << "\n";
+        } else if(leftType == "float" && resultType == "int") {
+            cout << "ftoi" << node->left->lexeme << "\n";
+        } 
+
+        if(rightType == "int" && resultType == "float") {
+            cout << "itof" << node->right->lexeme << "\n";
+        } else if (rightType == "float" && resultType == "int") {
+            cout << "ftoi" << node->right->lexeme << "\n";
+        }
+
+        string iorf = (node->actual_type == "int") ? "i" : "f";
+        cout << iorf;
+        string opd1, opd2;
+
+        opd1 = ilStack.peek();
+        ilStack.pop();
+        opd2 = ilStack.peek();
+        ilStack.pop();
+
+        switch (node->token) {
+            case T_ADD:
+                cout << "add \n" << opd2 << "+" << opd1 << "\n";
+                ilStack.push( opd2 + "+" + opd1);
+                break;
+            case T_SUB:
+                cout << "sub \n" << opd2 << "-" << opd1 << "\n";
+                ilStack.push( opd2 + "-" + opd1);
+                break;
+            case T_MULT:
+                cout << "mult \n" << opd2 << "*" << opd1 << "\n";
+                ilStack.push( opd2 + "*" + opd1);
+                break;
+            case T_DIV:
+                cout << "div \n" << opd2 << "/" << opd1 << "\n";
+                ilStack.push( opd2 + "/" + opd1);
+                break;
+        }
+    }
 }
 
 /* Expected / Computed Type (pre-order)*/
@@ -393,7 +467,7 @@ void determineExpectedType(Node* node) {
     determineExpectedType (node->right);  
 }
 
-/* Actual Type (post-order)*/
+/*
 void determineActualType(Node* node) {
     if (node == nullptr) return;
 
@@ -415,7 +489,7 @@ void determineActualType(Node* node) {
             cout << "Type Error: incompatible types for operator " << node->lexeme << "\n";
         }
     } 
-}
+}*/
 
 /* Parse Tree*/
 // <program> --> <declare_list> {<assign_list>  | <declare_list> }
